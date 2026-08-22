@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #FFF9E8;
+  --ink: #0A0A0A;
+  --yellow: #FFE156;
+  --pink: #FF5DA2;
+  --cyan: #4DD4E6;
+  --red: #FF5C4D;
+  --lime: #A0F04D;
+  --purple: #B285FF;
+  --orange: #FFB84D;
+}
+
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-comic { font-family: 'Bangers', 'Space Grotesk', sans-serif; letter-spacing: 0.04em; }
+
+@layer components {
+  .brut {
+    border: 3px solid #000;
+    box-shadow: 6px 6px 0 #000;
+    background: #fff;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .brut:hover { transform: translate(-2px, -2px); box-shadow: 9px 9px 0 #000; }
+
+  .brut-lg {
+    border: 4px solid #000;
+    box-shadow: 10px 10px 0 #000;
+    background: #fff;
+  }
+
+  .brut-btn {
+    border: 3px solid #000;
+    box-shadow: 5px 5px 0 #000;
+    background: var(--yellow);
+    font-weight: 700;
+    transition: all 100ms ease;
+    cursor: pointer;
+  }
+  .brut-btn:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 #000; }
+  .brut-btn:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 #000; }
+}
+
+.halftone {
+  background-image: radial-gradient(#000 1.2px, transparent 1.4px);
+  background-size: 12px 12px;
+}
+
+.halftone-yellow {
+  background-color: var(--yellow);
+  background-image: radial-gradient(#000 1.2px, transparent 1.4px);
+  background-size: 14px 14px;
+}
+
+.halftone-pink {
+  background-color: var(--pink);
+  background-image: radial-gradient(rgba(0,0,0,0.35) 1.2px, transparent 1.4px);
+  background-size: 14px 14px;
+}
+
+.sticker {
+  display: inline-block;
+  border: 2.5px solid #000;
+  box-shadow: 3px 3px 0 #000;
+  padding: 2px 10px;
+  font-family: 'Bangers', sans-serif;
+  letter-spacing: 0.05em;
+  font-size: 12px;
+}
+
+.pow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  background: var(--yellow);
+  border: 3px solid #000;
+  clip-path: polygon(50% 0%, 61% 12%, 78% 5%, 82% 22%, 100% 28%, 90% 44%, 100% 60%, 82% 66%, 78% 84%, 61% 78%, 50% 100%, 39% 78%, 22% 84%, 18% 66%, 0% 60%, 10% 44%, 0% 28%, 18% 22%, 22% 5%, 39% 12%);
+  font-family: 'Bangers', sans-serif;
+  font-size: 22px;
+  transform: rotate(-8deg);
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-track { animation: marquee 40s linear infinite; }
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+.wobble { animation: wobble 4s ease-in-out infinite; }
+
+@keyframes pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pop { animation: pop 260ms ease-out; }
+
+.stripes {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 10px,
+    rgba(0,0,0,0.08) 10px 20px
+  );
+}
+
+
+/* --- button state helpers (win over .brut-btn default background) --- */
+.brut-btn.is-active { background: #000 !important; color: var(--yellow) !important; }
+.brut-btn.is-pink   { background: var(--pink) !important; color: #fff !important; }
+.brut-btn.is-light  { background: #fff !important; color: var(--ink) !important; }
+.brut-btn.is-lime   { background: var(--lime) !important; color: var(--ink) !important; }
+.brut-btn.is-yellow { background: var(--yellow) !important; color: var(--ink) !important; }
+
+
+/* --- mobile tuning: thinner borders/shadows so nothing overflows small screens --- */
+@media (max-width: 640px) {
+  .brut { border-width: 2.5px; box-shadow: 4px 4px 0 #000; }
+  .brut-lg { border-width: 3px; box-shadow: 6px 6px 0 #000; }
+  .brut-btn { border-width: 2.5px; box-shadow: 3px 3px 0 #000; }
+  .brut:hover, .brut-btn:hover { transform: none; }
+  .sticker { font-size: 11px; padding: 2px 8px; }
+  input, textarea, select { font-size: 16px; } /* stops iOS zoom-on-focus */
+}
