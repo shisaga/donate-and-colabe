@@ -76,6 +76,64 @@ async function currentUser(db, request) {
   return db.collection('users').findOne({ id: s.userId });
 }
 
+function readCookie(request, name) {
+  const raw = request.headers.get('cookie') || '';
+  const parts = raw.split(';');
+  for (const part of parts) {
+    const [k, ...rest] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(rest.join('=') || '');
+  }
+  return null;
+}
+
+function googleOAuthConfigured() {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+function publicOrigin(request) {
+  const url = new URL(request.url);
+  const headerHost = (request.headers.get('x-forwarded-host') || request.headers.get('host') || url.host).split(',')[0].trim();
+  const isLocal = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(headerHost);
+  if (isLocal) {
+    return `${url.protocol}//${headerHost}`.replace(/\/$/, '');
+  }
+  if (headerHost) {
+    const proto = (request.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
+    return `${proto}://${headerHost}`.replace(/\/$/, '');
+  }
+  return (process.env.NEXT_PUBLIC_BASE_URL || url.origin).replace(/\/$/, '');
+}
+
+function googleRedirectUri(request) {
+  return `${publicOrigin(request)}/auth/callback`;
+}
+
+async function upsertGoogleUser(db, profile) {
+  const email = String(profile?.email || '').trim().toLowerCase();
+  if (!email) {
+    const err = new Error('Google did not return an email');
+    err.status = 401;
+    throw err;
+  }
+  const name = profile?.name || email.split('@')[0];
+  const picture = profile?.picture || '';
+  let user = await db.collection('users').findOne({ email });
+  if (!user) {
+    user = {
+      id: uuidv4(), name, email, passwordHash: null, role: 'user',
+      provider: 'google', picture, createdAt: new Date(),
+    };
+    await db.collection('users').insertOne(user);
+  } else {
+    await db.collection('users').updateOne({ id: user.id }, {
+      $set: { provider: user.provider || 'google', picture: picture || user.picture || '' },
+    });
+    user = await db.collection('users').findOne({ id: user.id });
+  }
+  const token = await createSession(db, user.id);
+  return { token, user: publicUser(user) };
+}
+
 /* ------------------------- static config ------------------------- */
 const PLANS = {
   spark:   { id: 'spark',   name: 'Spark',   duration: 24 * 60 * 60 * 1000,      price: 1,   label: 'from ₹1 • 24 hours' },
@@ -846,32 +904,70 @@ async function handler(request, context) {
       return json({ token, user: publicUser(user) });
     }
 
-    // Google login via Emergent managed auth (no OAuth keys required)
-    if (path === '/auth/google/session' && method === 'POST') {
-      const { sessionId } = await request.json();
-      if (!sessionId) return json({ error: 'sessionId required' }, 400);
-      const r = await fetch('https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data', {
-        method: 'GET',
-        headers: { 'X-Session-ID': sessionId },
+    // Google OAuth (authorization-code). Client secret never leaves the server.
+    if (path === '/auth/google' && method === 'GET') {
+      if (!googleOAuthConfigured()) {
+        return json({ error: 'Google login is not configured on the server.' }, 503);
+      }
+      const state = crypto.randomBytes(16).toString('hex');
+      const redirectUri = googleRedirectUri(request);
+      const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: 'openid email profile',
+        state,
+        access_type: 'online',
+        prompt: 'select_account',
+      });
+      const res = NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+      res.cookies.set('g_oauth_state', state, {
+        httpOnly: true,
+        secure: request.url.startsWith('https://'),
+        sameSite: 'lax',
+        maxAge: 600,
+        path: '/',
+      });
+      return res;
+    }
+
+    if (path === '/auth/google/callback' && method === 'POST') {
+      if (!googleOAuthConfigured()) {
+        return json({ error: 'Google login is not configured on the server.' }, 503);
+      }
+      const { code, state } = await request.json();
+      const expected = readCookie(request, 'g_oauth_state');
+      if (!code) return json({ error: 'Missing Google authorization code' }, 400);
+      if (!state || !expected || state !== expected) {
+        return json({ error: 'Google login state mismatch. Please try again.' }, 401);
+      }
+      const redirectUri = googleRedirectUri(request);
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code: String(code),
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+        }),
         cache: 'no-store',
       });
-      if (!r.ok) return json({ error: 'Google session is invalid or expired. Please try again.' }, 401);
-      const profile = await r.json();
-      const email = String(profile?.email || '').trim().toLowerCase();
-      if (!email) return json({ error: 'Google did not return an email' }, 401);
-      const name = profile?.name || email.split('@')[0];
-      let user = await db.collection('users').findOne({ email });
-      if (!user) {
-        user = {
-          id: uuidv4(), name, email, passwordHash: null, role: 'user',
-          provider: 'google', picture: profile?.picture || '', createdAt: new Date(),
-        };
-        await db.collection('users').insertOne(user);
-      } else {
-        await db.collection('users').updateOne({ id: user.id }, { $set: { provider: user.provider || 'google', picture: profile?.picture || user.picture || '' } });
+      const tokenPayload = await tokenRes.json().catch(() => ({}));
+      if (!tokenRes.ok || !tokenPayload.access_token) {
+        return json({ error: tokenPayload.error_description || 'Google did not accept this login. Check the redirect URI in Google Cloud.' }, 401);
       }
-      const token = await createSession(db, user.id);
-      return json({ token, user: publicUser(user) });
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+        cache: 'no-store',
+      });
+      const profile = await profileRes.json().catch(() => ({}));
+      if (!profileRes.ok) return json({ error: 'Could not read your Google profile' }, 401);
+      const out = await upsertGoogleUser(db, profile);
+      const res = json(out);
+      res.cookies.set('g_oauth_state', '', { httpOnly: true, maxAge: 0, path: '/' });
+      return res;
     }
 
     if (path === '/auth/me' && method === 'GET') {
@@ -1193,7 +1289,7 @@ async function handler(request, context) {
       });
     }
 
-    /* ---------- REAL payments: Stripe Checkout (Emergent managed sandbox) ---------- */
+    /* ---------- Stripe Checkout ---------- */
     if (path === '/payments/config' && method === 'GET') {
       return json({
         provider: stripeEnabled ? 'stripe' : 'mock', mode: stripeMode,
@@ -1238,7 +1334,7 @@ async function handler(request, context) {
         }, 409);
       }
 
-      const origin = process.env.NEXT_PUBLIC_BASE_URL || url.origin;
+      const origin = publicOrigin(request);
       const paymentId = uuidv4();
       try {
         const { session, currency, unit } = await createCheckoutSession({

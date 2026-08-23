@@ -36,9 +36,8 @@ export default function AuthModal({ open, onClose, onAuthed, reason }) {
 
   const google = () => {
     try {
-      const redirect = window.location.origin + '/auth/callback';
       window.sessionStorage.setItem('dc_after_login', window.location.pathname + window.location.search);
-      window.location.href = 'https://auth.emergentagent.com/?redirect=' + encodeURIComponent(redirect);
+      window.location.href = '/api/auth/google';
     } catch (e) { toast.error('Could not start Google login'); }
   };
 
@@ -60,11 +59,13 @@ export default function AuthModal({ open, onClose, onAuthed, reason }) {
         <button onClick={google} className="brut-btn w-full py-3 bg-white flex items-center justify-center gap-2 font-bold">
           <GoogleIcon /> Continue with Google
         </button>
+        {/* Hidden for now — Apple Sign In needs Apple Developer keys (Team ID, Key ID, Services ID, .p8 key). Uncomment to show again.
         <button
           onClick={() => toast.info('Apple Sign In needs Apple Developer keys (Team ID, Key ID, Services ID, .p8 key). Share them and I will switch it on.')}
           className="brut-btn w-full py-3 bg-black text-white flex items-center justify-center gap-2 font-bold">
           <span className="text-lg leading-none"></span> Continue with Apple
         </button>
+        */}
 
         <div className="flex items-center gap-2 text-xs font-bold uppercase opacity-60">
           <div className="h-[3px] bg-black flex-1" /> or email <div className="h-[3px] bg-black flex-1" />

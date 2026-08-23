@@ -10,13 +10,17 @@ export default function GoogleCallback() {
   useEffect(() => {
     const run = async () => {
       try {
-        const hash = window.location.hash || '';
-        const sessionId = new URLSearchParams(hash.replace(/^#/, '')).get('session_id');
-        if (!sessionId) throw new Error('Google login was cancelled or the session id is missing.');
-        const res = await fetch('/api/auth/google/session', {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('error')) {
+          throw new Error(params.get('error_description') || 'Google login was cancelled.');
+        }
+        const code = params.get('code');
+        const state = params.get('state');
+        if (!code) throw new Error('Google login was cancelled or the authorization code is missing.');
+        const res = await fetch('/api/auth/google/callback', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId }),
+          body: JSON.stringify({ code, state }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Google login failed');
