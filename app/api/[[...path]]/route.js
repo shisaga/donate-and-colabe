@@ -33,13 +33,61 @@ async function listingQuota(db) {
   };
 }
 
-let cachedClient = null;
-async function getDb() {
-  if (!cachedClient) {
-    cachedClient = new MongoClient(MONGO_URL);
-    await cachedClient.connect();
+const mongoOptions = {
+  maxPoolSize: 5,
+  minPoolSize: 0,
+  serverSelectionTimeoutMS: 10000,
+  connectTimeoutMS: 10000,
+};
+
+function isTopologyClosed(err) {
+  const msg = String(err?.message || err?.code || err?.name || '');
+  return /topology is closed/i.test(msg) || err?.name === 'MongoTopologyClosedError';
+}
+
+function resetMongo() {
+  const g = globalThis;
+  const stale = g.__mongoClient;
+  g.__mongoClient = null;
+  g.__mongoConnect = null;
+  if (stale) stale.close().catch(() => {});
+}
+
+async function connectMongo() {
+  const g = globalThis;
+  if (!g.__mongoConnect) {
+    g.__mongoConnect = new MongoClient(MONGO_URL, mongoOptions).connect()
+      .then((connected) => {
+        g.__mongoClient = connected;
+        connected.on('close', () => {
+          if (g.__mongoClient === connected) resetMongo();
+        });
+        return connected;
+      })
+      .catch((err) => {
+        resetMongo();
+        throw err;
+      });
   }
-  return cachedClient.db(DB_NAME);
+  return g.__mongoConnect;
+}
+
+async function getDb() {
+  if (!MONGO_URL) {
+    const err = new Error('Database is not configured');
+    err.status = 503;
+    throw err;
+  }
+  let client;
+  try {
+    client = await connectMongo();
+    await client.db('admin').command({ ping: 1 });
+  } catch {
+    resetMongo();
+    client = await connectMongo();
+    await client.db('admin').command({ ping: 1 });
+  }
+  return client.db(DB_NAME);
 }
 
 /* ------------------------- auth helpers ------------------------- */
@@ -868,9 +916,36 @@ async function handler(request, context) {
   const path = '/' + pathArr.join('/');
   const method = request.method;
   const url = new URL(request.url);
-  const db = await getDb();
 
   try {
+    // Start Google login without Mongo — a closed Atlas client was blocking the redirect.
+    if (path === '/auth/google' && method === 'GET') {
+      if (!googleOAuthConfigured()) {
+        return json({ error: 'Google login is not configured on the server.' }, 503);
+      }
+      const state = crypto.randomBytes(16).toString('hex');
+      const redirectUri = googleRedirectUri(request);
+      const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: 'openid email profile',
+        state,
+        access_type: 'online',
+        prompt: 'select_account',
+      });
+      const res = NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+      res.cookies.set('g_oauth_state', state, {
+        httpOnly: true,
+        secure: request.url.startsWith('https://'),
+        sameSite: 'lax',
+        maxAge: 600,
+        path: '/',
+      });
+      return res;
+    }
+
+    const db = await getDb();
     await seedIfNeeded(db);
     await ensureBattle(db);
 
@@ -902,33 +977,6 @@ async function handler(request, context) {
       }
       const token = await createSession(db, user.id);
       return json({ token, user: publicUser(user) });
-    }
-
-    // Google OAuth (authorization-code). Client secret never leaves the server.
-    if (path === '/auth/google' && method === 'GET') {
-      if (!googleOAuthConfigured()) {
-        return json({ error: 'Google login is not configured on the server.' }, 503);
-      }
-      const state = crypto.randomBytes(16).toString('hex');
-      const redirectUri = googleRedirectUri(request);
-      const params = new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        redirect_uri: redirectUri,
-        response_type: 'code',
-        scope: 'openid email profile',
-        state,
-        access_type: 'online',
-        prompt: 'select_account',
-      });
-      const res = NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
-      res.cookies.set('g_oauth_state', state, {
-        httpOnly: true,
-        secure: request.url.startsWith('https://'),
-        sameSite: 'lax',
-        maxAge: 600,
-        path: '/',
-      });
-      return res;
     }
 
     if (path === '/auth/google/callback' && method === 'POST') {
@@ -1677,6 +1725,11 @@ async function handler(request, context) {
 
     return json({ error: 'Not found', path }, 404);
   } catch (err) {
+    if (isTopologyClosed(err) && !context._mongoRetry) {
+      context._mongoRetry = true;
+      resetMongo();
+      return handler(request, context);
+    }
     console.error('API error:', err);
     return json({ error: err.message, code: err.code }, err.status || 500);
   }

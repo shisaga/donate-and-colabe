@@ -1,5 +1,5 @@
 import './globals.css';
-import { Analytics } from '@vercel/analytics/next';
+import { Analytics } from '@vercel/analytics/react';
 import { Toaster } from 'sonner';
 
 export const metadata = {
