@@ -53,7 +53,7 @@ export default function PaySuccess() {
               <Sticker color="#4DD4E6" rotate={3}>STRIPE SANDBOX</Sticker>
             </div>
             <div className="font-comic text-3xl sm:text-4xl leading-tight">
-              {d.kind === 'SELF_PAY' ? 'You climbed the board!' : 'Thanks for backing them!'}
+              {d.newRank === 1 ? '🏆 YOU ARE #1' : d.missedTarget ? '⚔️ Rank moved — you still climbed' : 'You climbed the board!'}
             </div>
             <div className="brut p-4 mt-4 halftone-yellow">
               <div className="flex items-center gap-3">
@@ -66,11 +66,17 @@ export default function PaySuccess() {
                 </div>
               </div>
               <div className="font-comic text-5xl mt-3">#{d.newRank}</div>
-              <div className="text-sm font-bold">{money(d.amount)} paid • {money(d.totalRaised)} gathered in total</div>
+              <div className="text-sm font-bold">{money(d.amount)} bid • {money(d.totalRaised)} on the board</div>
+              {d.movedUp > 0 && <div className="text-sm font-bold mt-1">📈 YOU MOVED UP {d.movedUp} POSITIONS</div>}
             </div>
-            <div className="brut p-3 mt-3 bg-white text-xs font-bold leading-relaxed">
-              Your {money(d.amount)} splits as 🎁 {money(Math.round((d.amount || 0) * 0.3))} creator • 🤲 {money(Math.round((d.amount || 0) * 0.4))} people in need • ⚙️ {money((d.amount || 0) - Math.round((d.amount || 0) * 0.3) - Math.round((d.amount || 0) * 0.4))} servers &amp; devs
-            </div>
+            {d.missedTarget && d.quoteNow && (
+              <div className="brut p-3 mt-3 bg-[#FF5C4D] text-white text-sm font-bold">
+                Someone else grabbed the rank first. Minimum to take #1 now: {money(d.quoteNow.minBid)}.
+              </div>
+            )}
+            <p className="mt-3 text-xs font-semibold opacity-70">
+              You paid for visibility on PayToTrend. This does not include Instagram followers, likes, or guaranteed engagement.
+            </p>
             <div className="flex gap-2 mt-4 flex-wrap">
               <a href="/" className="brut-btn px-5 py-3 is-pink bg-[#FF5DA2] text-white">Back to leaderboard</a>
               <a href="/dashboard" className="brut-btn px-5 py-3 is-light bg-white">My dashboard</a>

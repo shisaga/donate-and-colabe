@@ -5,11 +5,10 @@ import { Download, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { api } from '@/lib/client';
 
 const NETWORKS = [
-  { id: 'instagram', label: '📸 Instagram', base: 'https://instagram.com/' },
-  { id: 'linkedin', label: '💼 LinkedIn', base: 'https://linkedin.com/in/' },
-  { id: 'x', label: '🐦 X', base: 'https://x.com/' },
-  { id: 'github', label: '🐙 GitHub', base: 'https://github.com/' },
-  { id: 'youtube', label: '▶️ YouTube', base: 'https://youtube.com/@' },
+  { id: 'instagram', label: '📸 Instagram', base: 'https://instagram.com/', enabled: true },
+  { id: 'x', label: '𝕏 X', base: 'https://x.com/', enabled: false },
+  { id: 'youtube', label: '▶️ YouTube', base: 'https://youtube.com/@', enabled: false },
+  { id: 'linkedin', label: '💼 LinkedIn', base: 'https://linkedin.com/in/', enabled: false },
 ];
 
 export default function ProfilePicker({ form, setForm }) {
@@ -79,9 +78,9 @@ export default function ProfilePicker({ form, setForm }) {
 
       <div className="flex flex-wrap gap-2">
         {NETWORKS.map(n => (
-          <button key={n.id} type="button" onClick={() => setForm(f => ({ ...f, network: n.id }))}
-            className={`brut-btn px-3 py-2 text-xs ${network === n.id ? 'is-active bg-black text-[#FFE156]' : 'is-light bg-white'}`}>
-            {n.label}
+          <button key={n.id} type="button" disabled={!n.enabled} onClick={() => n.enabled && setForm(f => ({ ...f, network: n.id }))}
+            className={`brut-btn px-3 py-2 text-xs ${!n.enabled ? 'opacity-40 cursor-not-allowed' : network === n.id ? 'is-active bg-black text-[#FFE156]' : 'is-light bg-white'}`}>
+            {n.label}{!n.enabled ? ' (soon)' : ''}
           </button>
         ))}
       </div>

@@ -2,20 +2,33 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Trophy, Rocket, Zap, Share2, Plus, TrendingUp, Flame, ExternalLink, Crown, ArrowUp,
-  Clock, Users, IndianRupee, ChevronRight, LogOut, LayoutDashboard, Shield, Instagram, HeartHandshake, PiggyBank
+  Trophy, Zap, Share2, TrendingUp, Flame, Crown, ArrowUp,
+  Clock, Users, ChevronRight, LogOut, LayoutDashboard, Shield, Instagram, Swords, Eye, MousePointerClick
 } from 'lucide-react';
-import { Modal, Sticker, StatBox } from '@/components/brut';
+import { Modal, Sticker, StatBox, TalkCloud } from '@/components/brut';
 import AuthModal from '@/components/AuthModal';
 import InvestModal from '@/components/InvestModal';
-import ConnectModal from '@/components/ConnectModal';
 import ProfilePicker from '@/components/ProfilePicker';
-import { api, fmt, share30, timeLeft, useAuth } from '@/lib/client';
+import { api, compact, countdown, timeLeft, useAuth } from '@/lib/client';
 import { useMoney } from '@/lib/currency';
 
 const COLORS = ['#FFE156', '#FF5DA2', '#4DD4E6', '#FF5C4D', '#A0F04D', '#B285FF', '#FFB84D'];
+const PLATFORMS = [
+  { id: 'instagram', label: '📸 Instagram', enabled: true },
+  { id: 'x', label: '𝕏 X', enabled: false },
+  { id: 'youtube', label: '▶️ YouTube', enabled: false },
+  { id: 'linkedin', label: '💼 LinkedIn', enabled: false },
+];
+const PROFILE_CATS = [
+  { id: 'creators', name: 'Creator', emoji: '🎨' },
+  { id: 'businesses', name: 'Business', emoji: '🏢' },
+  { id: 'artists', name: 'Artist', emoji: '🎵' },
+  { id: 'instagram', name: 'Influencer', emoji: '📸' },
+  { id: 'startups', name: 'Brand', emoji: '🚀' },
+  { id: 'products', name: 'Other', emoji: '🛍' },
+];
+const viewed = new Set();
 
-/* ----------------------------- header ----------------------------- */
 function CurrencySwitcher() {
   const { currency, currencies, setCurrency } = useMoney();
   return (
@@ -37,20 +50,22 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
     <header className="border-b-4 border-black bg-[#FFE156] halftone" style={{ backgroundBlendMode: 'multiply' }}>
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between gap-2 flex-wrap">
         <a href="/" className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-black text-[#FFE156] flex items-center justify-center font-comic text-2xl" style={{ borderWidth: 3 }}>D&amp;C</div>
+          <div className="w-11 h-11 bg-black text-[#FFE156] flex items-center justify-center font-comic text-2xl" style={{ borderWidth: 3 }}>PTT</div>
           <div>
-            <div className="font-comic text-2xl leading-none">Donate &amp; Colab</div>
-            <div className="text-[11px] font-semibold tracking-wider uppercase">List • Pay for #1 • Get donations</div>
+            <div className="font-comic text-2xl leading-none">Pay To Trend</div>
+            <div className="text-[11px] font-semibold tracking-wider uppercase">List • Compete • Get Discovered</div>
           </div>
         </a>
         <div className="flex items-center gap-2">
           <CurrencySwitcher />
-          <a href="#instagram" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">📸 Instagram</a>
-          <a href="#leaderboard" className="hidden md:inline-block brut-btn px-3 py-2 bg-white text-sm">Rankings</a>
+          <a href="#leaderboard" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">📸 Instagram</a>
+          <a href="#leaderboard" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">🔥 Trending</a>
+          <a href="#leaderboard" className="hidden md:inline-block brut-btn px-3 py-2 bg-white text-sm">🏆 Rankings</a>
+          <a href="#how" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">❓ How It Works</a>
           {user ? (
             <>
               <a href="/dashboard" className="brut-btn px-3 py-2 bg-white text-sm inline-flex items-center gap-1">
-                <LayoutDashboard size={14} strokeWidth={3} /> <span className="hidden sm:inline">Dashboard</span>
+                <LayoutDashboard size={14} strokeWidth={3} /> <span className="hidden sm:inline">My Stats</span>
               </a>
               {user.role === 'admin' && (
                 <a href="/admin" className="brut-btn px-3 py-2 bg-black text-[#FFE156] text-sm inline-flex items-center gap-1">
@@ -65,7 +80,7 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
             <button onClick={onLogin} className="brut-btn px-4 py-2 bg-white text-sm font-bold">Log in</button>
           )}
           <button onClick={onSubmit} className="brut-btn px-4 py-2 bg-[#FF5DA2] text-white text-sm inline-flex items-center gap-1">
-            <Plus size={16} strokeWidth={3} /> List
+            <Flame size={16} strokeWidth={3} /> Start Trending
           </button>
         </div>
       </div>
@@ -73,9 +88,60 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
   );
 }
 
-/* ----------------------------- hero ----------------------------- */
-function Hero({ stats, onSubmit }) {
+function LiveBattleCard({ one, two, onTake }) {
   const { money } = useMoney();
+  if (!one) {
+    return (
+      <div className="brut-lg bg-black text-white p-4 sm:p-6 md:-rotate-1">
+        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#FFE156]">
+          <span className="live-dot" /> 🔥 LIVE BATTLE
+        </div>
+        <div className="font-comic text-4xl mt-3">NO ONE IS TRENDING YET</div>
+        <p className="text-sm font-bold mt-2 opacity-80">Be the first to fight for #1.</p>
+        <button onClick={() => onTake(null)} className="brut-btn mt-4 w-full py-3 bg-[#FF5DA2] text-white text-lg">🔥 CLAIM #1</button>
+      </div>
+    );
+  }
+  const gap = Math.max(0, (one.score || one.raised || 0) - (two?.score || two?.raised || 0));
+  return (
+    <div className="brut-lg bg-black text-white p-4 sm:p-6 md:-rotate-1 attack-flash">
+      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#FFE156]">
+        <span className="live-dot" /> 🔥 LIVE BATTLE
+      </div>
+      <div className="mt-3 text-[11px] font-bold uppercase opacity-70">Current #1</div>
+      <div className="flex items-center gap-3 mt-1">
+        {one.image
+          ? <img src={one.image} alt={one.name} className="w-12 h-12 brut object-cover bg-white" />
+          : <div className="w-12 h-12 brut bg-[#FFE156] text-black flex items-center justify-center text-2xl">{one.logo}</div>}
+        <div className="min-w-0">
+          <div className="font-comic text-3xl leading-none break-all">{one.name}</div>
+          <div className="text-xs font-bold">{compact(one.views)} views</div>
+        </div>
+      </div>
+      <div className="font-comic text-4xl sm:text-5xl md:text-6xl text-[#FFE156] leading-none mt-3 break-words">{money(one.raised)}</div>
+      <div className="brut mt-4 p-3 bg-[#FFE156] text-black">
+        <div className="text-[11px] font-bold uppercase">Defend time</div>
+        <div className="font-comic text-3xl leading-tight">{one.trendingUntil ? countdown(one.trendingUntil) : '24H WINDOW'}</div>
+      </div>
+      {two && (
+        <div className="brut mt-3 p-3 bg-[#FF5C4D] text-white text-sm font-bold">
+          ⚠️ #2 {two.name} IS ONLY {money(gap || two.toTakeOne || 100)} AWAY
+        </div>
+      )}
+      <button onClick={() => onTake(one)} className="brut-btn mt-4 w-full py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center justify-center gap-2">
+        <Swords size={18} strokeWidth={3} /> TAKE #1
+      </button>
+    </div>
+  );
+}
+
+function Hero({ stats, one, two, onSubmit, onTake }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  void tick;
   return (
     <section className="relative overflow-hidden border-b-4 border-black">
       <div className="absolute inset-0 halftone opacity-30" />
@@ -83,48 +149,30 @@ function Hero({ stats, onSubmit }) {
         <div className="grid lg:grid-cols-[1fr_380px] gap-10 items-center">
           <div>
             <div className="flex flex-wrap gap-2 mb-5">
-              <Sticker color="#4DD4E6" rotate={-4}>🔥 LIVE FUNDING BOARD</Sticker>
-              <Sticker color="#A0F04D" rotate={3}>{stats.viewersOnline || 42} people online</Sticker>
+              <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">🔥 LIVE TRENDING</span></Sticker>
+              <Sticker color="#A0F04D" rotate={3}>{stats.viewersOnline || 42} people watching</Sticker>
+              <Sticker color="#4DD4E6" rotate={-2}>COMPETE • CLIMB • GET DISCOVERED</Sticker>
             </div>
             <h1 className="font-comic text-4xl sm:text-5xl md:text-7xl leading-[0.95] md:leading-[0.92] tracking-wide break-words">
-              LIST YOUR ID.<br />
-              PAY FOR #1.<br />
-              <span className="bg-black text-[#FFE156] px-3 inline-block -rotate-1">OR GET DONATIONS.</span>
+              LIST YOUR PROFILE.<br />
+              FIGHT FOR <span className="bg-[#FF5DA2] text-white px-3 inline-block -rotate-1">#1</span>.<br />
+              <span className="bg-black text-[#FFE156] px-3 inline-block rotate-1">GET DISCOVERED.</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl max-w-xl font-medium">
-              List your Instagram ID, app or startup. <b>Pay to grab rank #1</b> — or let your fans
-              <b> donate from ₹1 (no upper cap)</b> to push you higher. Two ways up the same public board,
-              and <b>you keep 30% of everything gathered</b> for maintaining and growing your work.
+              Put your Instagram profile in front of people who are looking for what&apos;s trending.
+              Compete with other profiles, climb the leaderboard, and defend your position.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href="#leaderboard" className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg inline-flex items-center gap-2">
-                <PiggyBank size={20} strokeWidth={3} /> Donate from ₹1
-              </a>
               <button onClick={onSubmit} className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center gap-2">
-                <Rocket size={20} strokeWidth={3} /> List &amp; pay for #1
+                <Flame size={20} strokeWidth={3} /> Start Trending
               </button>
-              <a href="#instagram" className="brut-btn px-6 py-3 bg-white text-lg inline-flex items-center gap-2">
-                <Instagram size={20} strokeWidth={3} /> Trending IG
+              <a href="#leaderboard" className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg inline-flex items-center gap-2">
+                <Trophy size={20} strokeWidth={3} /> View Rankings
               </a>
+              <a href="#how" className="brut-btn px-6 py-3 bg-white text-lg">How It Works</a>
             </div>
           </div>
-
-          <div className="brut-lg bg-black text-white p-4 sm:p-6 md:-rotate-1">
-            <div className="text-[11px] font-bold uppercase tracking-widest text-[#FFE156]">Total gathering so far</div>
-            <div className="font-comic text-4xl sm:text-5xl md:text-6xl text-[#FFE156] leading-none mt-2 break-words">{money(stats.totalRaised)}</div>
-            <div className="text-sm font-semibold mt-2">from <b>{stats.totalBackers || 0}</b> payments across <b>{stats.totalListings || 0}</b> listings</div>
-            <div className="brut mt-4 p-3 bg-[#A0F04D] text-black">
-              <div className="text-[11px] font-bold uppercase">You can get 30% of your total gathering</div>
-              <div className="font-comic text-3xl leading-tight">{money(stats.creatorPool)}</div>
-              <div className="text-xs font-bold">earmarked for listing owners — to maintain &amp; upgrade their work</div>
-            </div>
-            <div className="brut mt-3 p-3 bg-[#4DD4E6] text-black">
-              <div className="text-[11px] font-bold uppercase">40% goes to people in need</div>
-              <div className="font-comic text-3xl leading-tight">{money(stats.charityPool)}</div>
-              <div className="text-xs font-bold">the help fund, published openly</div>
-            </div>
-            <div className="text-[11px] font-semibold mt-3 opacity-80">The last 30% keeps the servers running and pays the developers. Every paid position is tagged SPONSORED.</div>
-          </div>
+          <LiveBattleCard one={one} two={two} onTake={onTake} />
         </div>
       </div>
     </section>
@@ -136,14 +184,23 @@ function GatheringStrip({ stats }) {
   return (
     <section className="max-w-7xl mx-auto px-3 sm:px-4 -mt-2 pt-8">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatBox color="#FFE156" label="Total gathering" value={money(stats.totalRaised)} sub={`${money(stats.selfPaidTotal)} self-paid • ${money(stats.donatedTotal)} donated`} />
-        <StatBox color="#A0F04D" label="Creator share (30%)" value={money(stats.creatorPool)} sub="payable to listing owners" />
-        <StatBox color="#4DD4E6" label="Help fund (40%)" value={money(stats.charityPool)} sub="for people who need it" />
-        <StatBox color="#B285FF" label="Servers + devs (30%)" value={money(stats.platformPool)} sub="keeps the lights on" />
-        <StatBox color="#FF5DA2" label="Live listings" value={stats.totalListings || 0} sub={`${stats.totalBackers || 0} payments • ${stats.activePromos || 0} sponsored`} />
+        <StatBox color="#FFE156" label="Total trending" value={money(stats.totalRaised)} sub="across active competitions" />
+        <StatBox color="#A0F04D" label="Active profiles" value={stats.activeProfiles || stats.totalListings || 0} sub="currently competing" />
+        <StatBox color="#4DD4E6" label="Profile views" value={compact(stats.totalViews)} sub="generated this week" />
+        <StatBox color="#B285FF" label="Social clicks" value={compact(stats.totalClicks)} sub="people discovered profiles" />
+        <StatBox color="#FF5DA2" label="Live battles" value={stats.liveBattles || 0} sub="profiles fighting for #1" />
       </div>
     </section>
   );
+}
+
+function activityText(e, money) {
+  if (e.eventType === 'TOOK_RANK' || e.eventType === 'SELF_PAY') return `🔥 ${e.listingName} just took a rank — ${money(e.amount)}`;
+  if (e.eventType === 'DEFENDED') return `🛡️ ${e.listingName} defended their position`;
+  if (e.eventType === 'ENTERED') return `🔥 ${e.listingName} entered the leaderboard`;
+  if (e.eventType === 'SOCIAL_CLICK') return `📈 ${e.listingName} got a new Instagram click`;
+  if (e.eventType === 'LOST_RANK') return `⚠️ ${e.listingName} lost #1`;
+  return `⚡ ${e.listingName || e.backerName} moved on the board`;
 }
 
 function ActivityMarquee({ activity }) {
@@ -156,9 +213,7 @@ function ActivityMarquee({ activity }) {
         {items.map((e, i) => (
           <span key={i} className="inline-flex items-center gap-2 mx-6">
             <Zap size={14} className="text-[#FF5DA2]" fill="#FF5DA2" />
-            {e.eventType === 'SELF_PAY'
-              ? (<><b>{e.listingName}</b> paid <span className="text-white">{money(e.amount)}</span> to climb the board</>)
-              : (<><b>{e.backerName || 'Someone'}</b> donated <span className="text-white">{money(e.amount)}</span> to <b>{e.listingName}</b></>)}
+            {activityText(e, money)}
           </span>
         ))}
       </div>
@@ -166,13 +221,33 @@ function ActivityMarquee({ activity }) {
   );
 }
 
-/* ----------------------------- listings ----------------------------- */
+function BattleStrip({ battle }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  void tick;
+  if (!battle?.endAt) return null;
+  return (
+    <section className="max-w-7xl mx-auto px-3 sm:px-4 pt-8">
+      <div className="brut p-4 sm:p-5 bg-black text-white flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-widest text-[#FF5DA2]">🔥 {battle.label || 'TRENDING BATTLE'}</div>
+          <div className="font-comic text-3xl sm:text-4xl mt-1">ENDS IN {countdown(battle.endAt)}</div>
+        </div>
+        <Sticker color="#FFE156" rotate={-3}>FIGHT FOR #1</Sticker>
+      </div>
+    </section>
+  );
+}
+
 function CategoryTabs({ categories, active, onChange }) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-2">
       <button onClick={() => onChange('all')}
         className={`brut-btn px-4 py-2 whitespace-nowrap ${active === 'all' ? 'is-active bg-black text-[#FFE156]' : 'is-light bg-white'}`}>
-        🏆 All
+        🔥 All
       </button>
       {categories.map(c => (
         <button key={c.id} onClick={() => onChange(c.id)}
@@ -185,18 +260,38 @@ function CategoryTabs({ categories, active, onChange }) {
 }
 
 function RankBadge({ rank }) {
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
   const bg = rank === 1 ? '#FFE156' : rank === 2 ? '#4DD4E6' : rank === 3 ? '#FF5DA2' : '#fff';
   return (
     <div className="brut inline-flex items-center gap-1 px-3 py-2 font-comic text-2xl" style={{ background: bg, boxShadow: '4px 4px 0 #000' }}>
-      {rank === 1 ? <Crown size={16} strokeWidth={3} /> : null} #{rank}
+      {medal ? <span>{medal}</span> : <Crown size={16} strokeWidth={3} />} #{rank}
     </div>
   );
 }
 
-function ListingCard({ listing, onInvest, onConnect, onShare }) {
-  const { money, fromBase } = useMoney();
+function statusChip(listing) {
+  if (listing.rank === 1) return { text: '🔥 HOLDING #1', color: '#FF5DA2', fg: '#fff' };
+  if (listing.toTakeOne && listing.toTakeOne <= 300) return { text: `⚡ ${listing.toTakeOne ? '' : ''}₹ TO #1`, color: '#FFE156', fg: '#000', amount: listing.toTakeOne };
+  if (listing.rank <= 3) return { text: '🔥 TRENDING NOW', color: '#A0F04D', fg: '#000' };
+  return { text: '⚔️ IN THE BATTLE', color: '#B285FF', fg: '#000' };
+}
+
+function ListingCard({ listing, onTake, onShare }) {
+  const { money } = useMoney();
   const color = COLORS[(listing.rank - 1) % COLORS.length];
   const isTop3 = listing.rank <= 3;
+  const chip = statusChip(listing);
+  useEffect(() => {
+    if (viewed.has(listing.id)) return;
+    viewed.add(listing.id);
+    api(`/listings/${listing.id}/view`, { method: 'POST' }).catch(() => {});
+  }, [listing.id]);
+  const visit = async () => {
+    try { await api(`/listings/${listing.id}/click`, { method: 'POST' }); } catch (e) {}
+    const href = listing.website || (listing.handle ? `https://instagram.com/${listing.handle}` : '');
+    if (href) window.open(href, '_blank', 'noreferrer');
+  };
+
   return (
     <div className={`brut p-3 sm:p-4 md:p-5 relative pop overflow-hidden`} style={{ background: isTop3 ? color : '#fff' }}>
       {isTop3 && <div className="absolute -top-3 -left-3"><Sticker color="#000" rotate={-8}><span className="text-white">🔥 TOP {listing.rank}</span></Sticker></div>}
@@ -212,39 +307,27 @@ function ListingCard({ listing, onInvest, onConnect, onShare }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-comic text-xl sm:text-2xl leading-tight break-all">{listing.name}</h3>
-            {listing.sponsored && <Sticker color="#FF5DA2" rotate={-2}><span className="text-white">SPONSORED</span></Sticker>}
             {listing.verified && <Sticker color="#A0F04D" rotate={2}>✓ VERIFIED</Sticker>}
           </div>
-          <p className="text-sm font-medium mt-1 opacity-90">{listing.tagline}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-bold">
-            <span className="brut px-2 py-1 bg-white inline-flex items-center gap-1">
-              {money(listing.raised)} gathered
+          <p className="text-sm font-medium mt-1 opacity-90">{listing.displayName && listing.displayName !== listing.name ? listing.displayName + ' · ' : ''}{listing.tagline}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold">
+            <span className="brut px-2 py-1 bg-white">{money(listing.raised)}</span>
+            <span className="brut px-2 py-1 bg-white inline-flex items-center gap-1"><Eye size={11} strokeWidth={3} /> {compact(listing.views)} views</span>
+            <span className="brut px-2 py-1 bg-white inline-flex items-center gap-1"><MousePointerClick size={11} strokeWidth={3} /> {compact(listing.clicks)} Instagram clicks</span>
+            <span className="brut px-2 py-1" style={{ background: chip.color, color: chip.fg }}>
+              {chip.amount ? `⚡ ${money(chip.amount)} TO #1` : chip.text}
             </span>
-            <span className="brut px-2 py-1 bg-white inline-flex items-center gap-1">
-              <HeartHandshake size={11} strokeWidth={3} /> {listing.backers || 0} backers
-            </span>
-            <span className="brut px-2 py-1 bg-[#A0F04D] inline-flex items-center gap-1">
-              30% share = {money(listing.creatorShare)}
-            </span>
-            {listing.promotionExpiry && (
-              <span className="inline-flex items-center gap-1 text-[#FF5C4D]"><Clock size={12} strokeWidth={3} /> highlight ends in {timeLeft(listing.promotionExpiry)}</span>
-            )}
-            {listing.website && (
-              <a href={listing.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
-                <ExternalLink size={12} strokeWidth={3} /> Visit
-              </a>
+            {listing.trendingUntil && (
+              <span className="inline-flex items-center gap-1"><Clock size={12} strokeWidth={3} /> {timeLeft(listing.trendingUntil)} left</span>
             )}
           </div>
         </div>
         <div className="flex flex-col gap-2 w-full md:w-auto">
-          <button onClick={() => onInvest(listing, 'SELF_PAY')} className="brut-btn px-4 py-2 bg-[#FFE156] text-sm inline-flex items-center justify-center gap-1">
-            <Crown size={14} strokeWidth={3} /> Pay to rank
+          <button onClick={() => onTake(listing)} className="brut-btn px-4 py-3 bg-[#FF5DA2] text-white text-sm inline-flex items-center justify-center gap-1">
+            <Flame size={14} strokeWidth={3} /> TAKE #{listing.rank}
           </button>
-          <button onClick={() => onInvest(listing, 'DONATION')} className="brut-btn px-4 py-2 bg-[#FF5DA2] text-white text-sm inline-flex items-center justify-center gap-1">
-            <Flame size={14} strokeWidth={3} /> Donate ₹1+
-          </button>
-          <button onClick={() => onConnect(listing)} className="brut-btn px-4 py-2 bg-white text-xs inline-flex items-center justify-center gap-1">
-            🤝 How to connect
+          <button onClick={visit} className="brut-btn px-4 py-2 bg-white text-sm inline-flex items-center justify-center gap-1">
+            <Instagram size={14} strokeWidth={3} /> Visit Instagram
           </button>
           <button onClick={() => onShare(listing)} className="brut-btn px-4 py-2 bg-white text-xs inline-flex items-center justify-center gap-1">
             <Share2 size={12} strokeWidth={3} /> Share
@@ -252,12 +335,17 @@ function ListingCard({ listing, onInvest, onConnect, onShare }) {
         </div>
       </div>
       <div className="mt-3 pt-3 border-t-2 border-dashed border-black text-xs font-semibold flex flex-wrap items-center gap-x-4 gap-y-1">
-        <span>👑 Self-paid: <b>{money(listing.selfPaid)}</b></span>
-        <span>❤️ Donated by fans: <b>{money(listing.donated)}</b></span>
-        {listing.rank > 1 && (
+        {listing.rank === 1 ? (
+          <span className="inline-flex items-center gap-1 font-bold">
+            🔥 HOLDING #1
+            {listing.leadOverNext > 0 && <span> · ⚠️ #{2} is {money(listing.leadOverNext)} behind</span>}
+          </span>
+        ) : (
           <span className="inline-flex items-center gap-1">
             <ArrowUp size={12} strokeWidth={3} className="text-[#FF5C4D]" />
-            <button onClick={() => onInvest(listing, 'SELF_PAY')} className="underline font-bold">pay to overtake #{listing.rank - 1}</button>
+            <button onClick={() => onTake(listing)} className="underline font-bold">
+              ⚠️ {money(listing.toTakeOne || listing.toTakeThis)} TO TAKE #1
+            </button>
           </span>
         )}
       </div>
@@ -265,187 +353,197 @@ function ListingCard({ listing, onInvest, onConnect, onShare }) {
   );
 }
 
-/* ----------------------------- instagram trending ----------------------------- */
-function InstagramTrending({ items, onInvest, onConnect }) {
+function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, challenge, onPay }) {
   const { money } = useMoney();
-  if (!items.length) return null;
-  return (
-    <section id="instagram" className="max-w-7xl mx-auto px-3 sm:px-4 py-12">
-      <div className="flex items-end justify-between mb-5 flex-wrap gap-2">
-        <div>
-          <div className="flex items-center gap-2 mb-2"><Instagram size={20} strokeWidth={3} /> <Sticker color="#FF5DA2" rotate={-3}><span className="text-white">TRENDING NOW</span></Sticker></div>
-          <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">Trending Instagram profiles</h2>
-          <p className="text-sm font-semibold mt-1 opacity-80">Instagram IDs competing on money gathered. Pay for your own rank, or donate to your favourite from ₹1.</p>
-        </div>
-      </div>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map(l => (
-          <div key={l.id} className="brut p-4 bg-white pop">
-            <div className="flex items-center gap-3">
-              <div className="font-comic text-3xl">#{l.rank}</div>
-              {l.image
-                ? <img src={l.image} alt={l.name} className="w-12 h-12 brut object-cover" />
-                : <div className="w-12 h-12 brut bg-[#FF5DA2] flex items-center justify-center text-2xl">{l.logo}</div>}
-              <div className="min-w-0">
-                <div className="font-comic text-xl leading-none truncate">{l.name}</div>
-                <div className="text-[11px] font-bold uppercase opacity-70">Instagram</div>
-              </div>
-            </div>
-            <p className="text-sm font-medium mt-3">{l.tagline}</p>
-            <div className="mt-3 flex items-center justify-between text-xs font-bold">
-              <span>{money(l.raised)} gathered</span>
-              <span className="brut px-2 py-1 bg-[#A0F04D]">30% = {money(l.creatorShare)}</span>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <button onClick={() => onInvest(l, 'SELF_PAY')} className="brut-btn flex-1 py-2 bg-[#FFE156] text-sm">👑 Pay to rank</button>
-              <button onClick={() => onInvest(l, 'DONATION')} className="brut-btn flex-1 py-2 bg-[#FF5DA2] text-white text-sm">❤️ Donate</button>
-              <button onClick={() => onConnect(l)} className="brut-btn py-2 px-3 bg-white text-sm">🤝</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ----------------------------- submit ----------------------------- */
-function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin }) {
-  const { money, local, chips, symbol } = useMoney();
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ type: 'PRODUCT', name: '', tagline: '', logo: '🚀', website: '', category: 'instagram', contactEmail: '', image: '', network: 'instagram', handle: '' });
-  const [kick, setKick] = useState('101');
+  const [form, setForm] = useState({ type: 'PROFILE', name: '', tagline: '', logo: '🔥', website: '', category: 'instagram', contactEmail: '', image: '', network: 'instagram', handle: '', displayName: '' });
+  const [targetRank, setTargetRank] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [quote, setQuote] = useState(null);
+  const [created, setCreated] = useState(null);
+
+  const loadQuote = async (listingId, cat, rank) => {
+    try {
+      const q = await api(`/challenge/quote?category=${cat || form.category}&targetRank=${rank || targetRank}${listingId ? `&listingId=${listingId}` : ''}`);
+      setQuote(q);
+    } catch (e) { /* ignore */ }
+  };
 
   useEffect(() => {
     if (open) {
-      setStep(1); setKick('101');
-      setForm({ type: 'PRODUCT', name: '', tagline: '', logo: '🚀', website: '', category: 'instagram', contactEmail: user?.email || '', image: '', network: 'instagram', handle: '' });
+      setStep(1);
+      setCreated(null);
+      setTargetRank(challenge?.rank || 1);
+      setForm({
+        type: 'PROFILE', name: '', tagline: '', logo: '🔥', website: '',
+        category: challenge?.category || 'instagram', contactEmail: user?.email || '',
+        image: '', network: 'instagram', handle: '', displayName: '',
+      });
+      loadQuote(null, challenge?.category || 'instagram', challenge?.rank || 1);
     }
-  }, [open, user]);
+  }, [open, user, challenge]);
 
-  const submit = async (withKick) => {
+  const createListing = async () => {
+    if (!user) return onNeedLogin();
+    if (!form.name.trim()) return toast.error('Profile name required');
     setLoading(true);
     try {
-      const d = await api('/listings', { method: 'POST', body: form });
-      const listing = d.listing;
-      if (withKick) {
-        const amount = Math.max(1, Math.floor(Number(kick) || 1));
-        const body = { listingId: listing.id, amount, kind: 'SELF_PAY', plan: 'weekly', backerName: user?.name };
-        try {
-          const cfg = await api('/payments/config');
-          if (cfg.provider === 'stripe') {
-            const c = await api('/payments/checkout', { method: 'POST', body });
-            if (c.url) { toast.success('Listed! Opening secure checkout...'); window.location.assign(c.url); return; }
-          }
-        } catch (err) { /* fall back to mock below */ }
-        const s = await api('/support', { method: 'POST', body });
-        toast.success(`🎉 Listed and kicked off at #${s.newRank} in ${form.category}!`);
-        onCreated({ ...listing, newRank: s.newRank, investedAmount: amount, raised: s.totalRaised, creatorShare: s.creatorShare, category: form.category });
-      } else {
-        toast.success('Listed! Now gather funds to climb.');
-        onCreated({ ...listing, category: form.category });
-      }
-      onClose();
+      const d = await api('/listings', { method: 'POST', body: { ...form, listFree: true } });
+      setCreated(d.listing);
+      if (d.quote) setQuote(d.quote);
+      else await loadQuote(d.listing.id, form.category, targetRank);
+      setStep(5);
     } catch (e) { toast.error(e.message); } finally { setLoading(false); }
   };
 
-  const emojis = ['🚀', '📸', '🤖', '💻', '🔥', '⚡', '🎨', '🛠️', '🌟', '💡', '🎯', '💃', '☕', '💪'];
+  const goPay = () => {
+    const listing = created;
+    if (!listing) return;
+    onClose();
+    onPay(listing, targetRank);
+  };
 
   return (
-    <Modal open={open} onClose={onClose} wide title="🚀 List your ID & pay to rank">
-      <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase">
-        <span className={step >= 1 ? '' : 'opacity-40'}>1. Details</span>
-        <ChevronRight size={12} />
-        <span className={step >= 2 ? '' : 'opacity-40'}>2. Kickstart funding</span>
-      </div>
-
-      {!user && (
-        <div className="brut p-3 bg-[#FFE156] mb-4 text-sm font-bold flex items-center justify-between gap-2 flex-wrap">
-          <span>Log in first so this listing is yours and you can claim your 30%.</span>
-          <button onClick={onNeedLogin} className="brut-btn px-3 py-2 bg-white text-xs">Log in / Register</button>
+    <Modal open={open} onClose={onClose} wide title="🔥 Start Trending">
+      {user && (
+        <div className="mb-4 flex items-center gap-1 text-[11px] font-bold uppercase overflow-x-auto">
+          {['Platform', 'Profile', 'Category', 'Rank', 'Pay'].map((l, i) => (
+            <span key={l} className="inline-flex items-center gap-1 flex-shrink-0">
+              {i > 0 && <ChevronRight size={12} />}
+              <span className={step >= i + 1 ? '' : 'opacity-40'}>{i + 1}. {l}</span>
+            </span>
+          ))}
         </div>
       )}
 
-      {step === 1 && (
+      {!user ? (
+        <div className="brut p-5 bg-[#FFE156] text-center space-y-3">
+          <div className="font-comic text-3xl">Log in to compete</div>
+          <p className="text-sm font-bold">You need an account before you can list a profile and fight for #1.</p>
+          <button onClick={onNeedLogin} className="brut-btn px-6 py-3 bg-black text-[#FFE156] text-lg">Log in / Register</button>
+        </div>
+      ) : step === 1 ? (
         <div className="space-y-4">
-          <div className="flex gap-2">
-            {['PRODUCT', 'PROFILE'].map(t => (
-              <button key={t} onClick={() => setForm(f => ({ ...f, type: t }))} className={`brut-btn flex-1 py-2 ${form.type === t ? 'is-active bg-black text-[#FFE156]' : 'is-light bg-white'}`}>
-                {t === 'PRODUCT' ? '🚀 App / Product' : '👤 Profile (IG / X)'}
+          <h2 className="font-comic text-3xl">Choose your platform</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {PLATFORMS.map(p => (
+              <button key={p.id} disabled={!p.enabled}
+                onClick={() => { setForm(f => ({ ...f, network: p.id })); setStep(2); }}
+                className={`brut-btn py-4 text-lg ${p.enabled ? 'bg-[#FFE156]' : 'bg-white opacity-50 cursor-not-allowed'}`}>
+                {p.label}{!p.enabled && <div className="text-[10px] font-bold">COMING SOON</div>}
               </button>
             ))}
           </div>
+        </div>
+      ) : step === 2 ? (
+        <div className="space-y-4">
+          <h2 className="font-comic text-3xl">Enter your profile</h2>
+          <input
+            value={form.website}
+            onChange={e => {
+              const v = e.target.value;
+              const h = v.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/\/.*$/, '');
+              setForm(f => ({ ...f, website: v, handle: h, name: f.name || (h ? '@' + h : '') }));
+            }}
+            placeholder="https://instagram.com/username"
+            className="brut w-full p-3 outline-none"
+          />
           <ProfilePicker form={form} setForm={setForm} />
-          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Name or @handle" className="brut w-full p-3 outline-none" />
-          <input value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} placeholder="One-line pitch (max 80 chars)" maxLength={80} className="brut w-full p-3 outline-none" />
-          <input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://instagram.com/yourhandle" className="brut w-full p-3 outline-none" />
-          <input value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} placeholder="Contact email (shown after someone connects)" className="brut w-full p-3 outline-none" />
-          <div>
-            <div className="text-xs font-bold mb-2">Pick an emoji</div>
-            <div className="flex flex-wrap gap-2">
-              {emojis.map(e => (
-                <button key={e} onClick={() => setForm(f => ({ ...f, logo: e }))} className={`brut w-11 h-11 text-2xl ${form.logo === e ? 'bg-[#FFE156]' : 'is-light bg-white'}`}>{e}</button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs font-bold mb-2">Category</div>
-            <div className="flex flex-wrap gap-2">
-              {categories.map(c => (
-                <button key={c.id} onClick={() => setForm(f => ({ ...f, category: c.id }))} className={`brut-btn px-3 py-2 text-sm ${form.category === c.id ? 'is-pink bg-[#FF5DA2] text-white' : 'is-light bg-white'}`}>
-                  {c.emoji} {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button onClick={() => { if (!form.name.trim()) return toast.error('Name required'); setStep(2); }} className="brut-btn px-6 py-3 bg-[#FFE156]">Next →</button>
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="@username" className="brut w-full p-3 outline-none" />
+          <input value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="Display name" className="brut w-full p-3 outline-none" />
+          <input value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} placeholder="One-line bio (max 80 chars)" maxLength={80} className="brut w-full p-3 outline-none" />
+          <div className="flex justify-between">
+            <button onClick={() => setStep(1)} className="brut-btn px-4 py-2 bg-white">← Back</button>
+            <button onClick={() => { if (!form.name.trim()) return toast.error('Username required'); setStep(3); }} className="brut-btn px-6 py-3 bg-[#FFE156]">Continue →</button>
           </div>
         </div>
-      )}
-
-      {step === 2 && (
+      ) : step === 3 ? (
         <div className="space-y-4">
-          <h2 className="font-comic text-3xl">Pay for your rank 👑</h2>
-          <p className="text-sm font-semibold">Pay any amount from ₹1 (no cap) to enter the board with a rank right away — or list free and let fans donate you upward.</p>
-          <div className="flex flex-wrap gap-2">
-            {(chips || [1, 51, 101, 501, 1000]).slice(0, 5).map(v => (
-              <button key={v} onClick={() => setKick(String(v))} className={`brut-btn px-3 py-2 text-sm ${String(v) === kick ? 'is-pink bg-[#FF5DA2] text-white' : 'is-light bg-white'}`}>{local(v)}</button>
+          <h2 className="font-comic text-3xl">Choose your category</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {PROFILE_CATS.map(c => (
+              <button key={c.id} onClick={() => { setForm(f => ({ ...f, category: c.id })); loadQuote(created?.id, c.id, targetRank); }}
+                className={`brut-btn py-3 ${form.category === c.id ? 'is-pink bg-[#FF5DA2] text-white' : 'is-light bg-white'}`}>
+                {c.emoji} {c.name}
+              </button>
             ))}
           </div>
-          <input type="number" min={1} value={kick} onChange={e => setKick(e.target.value)} className="brut w-full p-3 outline-none font-comic text-2xl" />
-          <div className="brut p-3 bg-[#A0F04D] text-sm font-bold">
-            You keep 30% of everything gathered (your own payments + fan donations). Pay {local(Math.max(1, Number(kick) || 1))} → your 30% share becomes {local(Math.round(Math.max(1, Number(kick) || 1) * 0.3))}.
+          <div className="flex justify-between">
+            <button onClick={() => setStep(2)} className="brut-btn px-4 py-2 bg-white">← Back</button>
+            <button onClick={() => { setStep(4); loadQuote(created?.id, form.category, targetRank); }} className="brut-btn px-6 py-3 bg-[#FFE156]">Continue →</button>
           </div>
-          <div className="brut p-2 bg-[#4DD4E6] font-bold text-xs text-center">🔒 Secure Stripe checkout (sandbox) — test card 4242 4242 4242 4242</div>
-          <div className="flex justify-between flex-wrap gap-2">
-            <button onClick={() => setStep(1)} className="brut-btn px-4 py-2 bg-white">← Back</button>
-            <div className="flex gap-2">
-              <button onClick={() => submit(false)} disabled={loading} className="brut-btn px-4 py-2 bg-white">List free</button>
-              <button onClick={() => submit(true)} disabled={loading} className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg">
-                {loading ? 'Working...' : '👑 List & pay to rank'}
-              </button>
+        </div>
+      ) : step === 4 ? (
+        <div className="space-y-4">
+          <h2 className="font-comic text-3xl">Choose your target</h2>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="brut p-4 bg-[#FFE156]">
+              <div className="text-[11px] font-bold uppercase">Current #1</div>
+              <div className="font-comic text-2xl">{quote?.top5?.[0]?.name || 'Open'}</div>
+              <div className="font-comic text-3xl">{money(quote?.top5?.[0]?.amount || 0)}</div>
+            </div>
+            <div className="brut p-4 bg-[#4DD4E6]">
+              <div className="text-[11px] font-bold uppercase">Current #5</div>
+              <div className="font-comic text-2xl">{quote?.top5?.[4]?.name || 'Open'}</div>
+              <div className="font-comic text-3xl">{money(quote?.top5?.[4]?.amount || 0)}</div>
             </div>
           </div>
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3, 4, 5].map(n => (
+              <button key={n} onClick={() => { setTargetRank(n); loadQuote(created?.id, form.category, n); }}
+                className={`brut-btn px-4 py-3 ${targetRank === n ? 'is-pink bg-[#FF5DA2] text-white' : 'is-light bg-white'}`}>
+                #{n}
+              </button>
+            ))}
+          </div>
+          {quote && (
+            <div className="brut p-3 bg-black text-white text-sm font-bold">
+              Minimum to take #{targetRank}: <span className="text-[#FFE156]">{money(quote.minBid)}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <button onClick={() => setStep(3)} className="brut-btn px-4 py-2 bg-white">← Back</button>
+            <button onClick={createListing} disabled={loading} className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg">
+              {loading ? 'Listing...' : 'Continue to payment →'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="brut p-4 bg-[#A0F04D]">
+            <div className="font-comic text-3xl">You&apos;re in the battle</div>
+            <p className="text-sm font-bold mt-1">{created?.name} is listed in {form.category}. Pay to take #{targetRank}.</p>
+          </div>
+          {quote && (
+            <div className="brut p-4 bg-white space-y-1 text-sm font-bold">
+              <div className="flex justify-between"><span>Current #{targetRank}</span><span>{money(quote.currentAmount)}</span></div>
+              <div className="flex justify-between"><span>Your required amount</span><span>{money(quote.minBid)}</span></div>
+              <div className="flex justify-between"><span>Platform fee</span><span>{money(quote.platformFee)}</span></div>
+              <div className="flex justify-between font-comic text-2xl pt-2 border-t-2 border-black"><span>Total</span><span>{money(quote.totalCharge)}</span></div>
+            </div>
+          )}
+          <button onClick={goPay} className="brut-btn w-full py-3 bg-[#FF5DA2] text-white text-lg">
+            🔥 TAKE #{targetRank}
+          </button>
         </div>
       )}
     </Modal>
   );
 }
 
-/* ----------------------------- rank card ----------------------------- */
-function RankCardModal({ open, onClose, listing }) {
+function RankCardModal({ open, onClose, listing, onAddMoney }) {
   const { money } = useMoney();
   const [pageUrl, setPageUrl] = useState('');
   useEffect(() => { if (typeof window !== 'undefined') setPageUrl(window.location.href); }, [open]);
   if (!listing) return null;
-  const shareText = `${listing.name} has gathered ${money(listing.raised)} on Donate & Colab and is #${listing.newRank || listing.rank} in ${listing.category} 🚀 Back them from ₹1!`;
+  const rank = listing.newRank || listing.rank;
+  const shareText = `${listing.name} is #${rank} on PayToTrend — fighting for trending visibility.`;
   const copy = () => {
     try { navigator.clipboard.writeText(shareText + '\n' + pageUrl); toast.success('Copied!'); }
     catch (e) { toast.error('Copy failed'); }
   };
   return (
-    <Modal open={open} onClose={onClose} title="🎉 Rank card">
+    <Modal open={open} onClose={onClose} title={rank === 1 ? '🏆 YOU ARE #1' : '🎉 Rank card'}>
       <div className="space-y-4">
         <div className="brut-lg p-6 halftone-yellow -rotate-1">
           <div className="flex items-center gap-3">
@@ -457,13 +555,15 @@ function RankCardModal({ open, onClose, listing }) {
               <div className="text-xs font-bold uppercase">{listing.category}</div>
             </div>
           </div>
-          <div className="mt-4 font-comic text-6xl leading-none">#{listing.newRank || listing.rank}</div>
-          <div className="text-sm font-bold mt-1">{money(listing.raised)} gathered • 30% share {money(listing.creatorShare ?? share30(listing.raised))}</div>
-          <div className="mt-3 flex gap-2 flex-wrap">
-            <Sticker color="#FF5DA2" rotate={-3}><span className="text-white">🔥 RANKED</span></Sticker>
-            {listing.investedAmount && <Sticker color="#4DD4E6">{money(listing.investedAmount)} invested</Sticker>}
-          </div>
+          <div className="mt-4 font-comic text-6xl leading-none">#{rank}</div>
+          <div className="text-sm font-bold mt-1">{money(listing.raised)} on the board · {compact(listing.views)} PayToTrend views</div>
+          {listing.movedUp > 0 && <p className="text-sm font-bold mt-3">📈 YOU MOVED UP {listing.movedUp} POSITIONS</p>}
         </div>
+        {onAddMoney && (
+          <button onClick={() => { onClose(); onAddMoney(listing); }} className="brut-btn w-full py-3 bg-[#FF5DA2] text-white text-lg">
+            🔥 Climb from #{rank}
+          </button>
+        )}
         <div className="grid grid-cols-3 gap-2">
           <a target="_blank" rel="noreferrer" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`} className="brut-btn py-2 bg-black text-white text-center text-sm">X</a>
           <a target="_blank" rel="noreferrer" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(pageUrl)}`} className="brut-btn py-2 bg-[#4DD4E6] text-center text-sm">LinkedIn</a>
@@ -474,72 +574,99 @@ function RankCardModal({ open, onClose, listing }) {
   );
 }
 
-
-function MoneySplit({ impact }) {
+function OvertakenModal({ note, onClose, onDefend }) {
   const { money } = useMoney();
-  const rows = [
-    { pct: '30%', title: 'To the creator', desc: 'Listing owners claim 30% of everything gathered to maintain and grow their work.', color: '#A0F04D', value: impact?.creatorPool, emoji: '🎁' },
-    { pct: '40%', title: 'To people in need', desc: 'The biggest slice. Goes to families and causes that need help — every payout is published here.', color: '#4DD4E6', value: impact?.charityPool, emoji: '🤲' },
-    { pct: '30%', title: 'Servers + developers', desc: 'Hosting, payment fees and the team building this platform.', color: '#B285FF', value: impact?.platformPool, emoji: '⚙️' },
-  ];
+  if (!note) return null;
   return (
-    <section id="impact" className="max-w-7xl mx-auto px-3 sm:px-4 py-12">
-      <div className="flex items-end justify-between mb-6 flex-wrap gap-2">
-        <div>
-          <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">Where every rupee goes</h2>
-          <p className="text-sm font-semibold mt-1 opacity-80">Fully public split. No hidden cuts.</p>
+    <Modal open={!!note} onClose={onClose} title="🚨 YOU JUST LOST #1">
+      <div className="space-y-4">
+        <div className="brut p-4 bg-[#FF5C4D] text-white">
+          <div className="font-comic text-3xl">⚠️ YOU&apos;VE BEEN OVERTAKEN</div>
+          <p className="text-sm font-bold mt-2">{note.challengerName} just took #1. You are now #{note.toRank}.</p>
         </div>
-        <Sticker color="#4DD4E6" rotate={-3}>30 / 40 / 30</Sticker>
-      </div>
-      <div className="grid md:grid-cols-3 gap-4">
-        {rows.map(r => (
-          <div key={r.title} className="brut p-5" style={{ background: r.color }}>
-            <div className="flex items-center justify-between">
-              <div className="text-4xl">{r.emoji}</div>
-              <div className="font-comic text-5xl">{r.pct}</div>
-            </div>
-            <div className="font-comic text-2xl mt-2">{r.title}</div>
-            <div className="text-sm font-semibold mt-1">{r.desc}</div>
-            <div className="brut bg-white mt-3 p-2 text-sm font-bold">{money(r.value)} so far</div>
-          </div>
-        ))}
-      </div>
-      <div className="brut mt-4 p-5 bg-black text-white flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-bold uppercase text-[#4DD4E6]">Help fund tracker</div>
-          <div className="font-comic text-3xl">{money(impact?.charityGiven)} already given away</div>
-          <div className="text-sm font-semibold">{money(impact?.charityRemaining)} waiting to be donated to people in need</div>
+        <div className="brut p-4 bg-white space-y-1 text-sm font-bold">
+          <div className="flex justify-between"><span>Current #1</span><span>{money(note.currentAmount)}</span></div>
+          <div className="flex justify-between"><span>Defend #1</span><span>{money(note.defendTotal || note.defendAmount)}</span></div>
         </div>
-        <div className="text-xs font-semibold max-w-sm">
-          {(impact?.recent || []).length === 0
-            ? 'No disbursement yet — the first one will be listed right here with the beneficiary name.'
-            : (impact.recent.slice(0, 3).map(r => (<div key={r.id}>❤️ {money(r.amount)} → {r.beneficiary}</div>)))}
-        </div>
+        <button onClick={onDefend} className="brut-btn w-full py-3 bg-[#FF5DA2] text-white text-lg">🔥 DEFEND #1</button>
       </div>
-    </section>
+    </Modal>
   );
 }
 
 function HowItWorks() {
   const steps = [
-    { emoji: '📝', title: 'List your ID', desc: 'Add your Instagram ID, app or startup in 60 seconds.', color: '#FFE156' },
-    { emoji: '👑', title: 'Pay for #1', desc: 'Pay any amount yourself — we show exactly what #1 costs.', color: '#FF5DA2' },
-    { emoji: '❤️', title: 'Fans donate', desc: 'Anyone can donate from ₹1 (no cap) to push you higher.', color: '#B285FF' },
-    { emoji: '🎁', title: '30/40/30 split', desc: 'Creator 30% • people in need 40% • servers & devs 30%.', color: '#A0F04D' },
-    { emoji: '🤝', title: 'Connect', desc: 'Log in, register, and connect directly with the creator.', color: '#4DD4E6' },
+    { n: '01', title: 'LIST', desc: 'Add your Instagram profile.', color: '#FFE156' },
+    { n: '02', title: 'ENTER', desc: 'Choose a category and enter the competition.', color: '#FF5DA2' },
+    { n: '03', title: 'CLIMB', desc: 'Pay to move higher on the leaderboard.', color: '#4DD4E6' },
+    { n: '04', title: 'GET DISCOVERED', desc: 'Higher positions receive more visibility on PayToTrend.', color: '#A0F04D' },
+    { n: '05', title: 'DEFEND', desc: 'Someone can challenge your position at any time.', color: '#B285FF' },
   ];
   return (
-    <section className="max-w-7xl mx-auto px-3 sm:px-4 py-14">
+    <section id="how" className="max-w-7xl mx-auto px-3 sm:px-4 py-14">
       <div className="flex items-end justify-between mb-6 flex-wrap gap-2">
-        <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">How it works</h2>
-        <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">₹1 to ∞</span></Sticker>
+        <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">How the battle works</h2>
+        <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">LIST → PAY → CLIMB → DEFEND</span></Sticker>
       </div>
       <div className="grid md:grid-cols-5 gap-4">
-        {steps.map((s, i) => (
-          <div key={i} className="brut p-5" style={{ background: s.color }}>
-            <div className="text-4xl">{s.emoji}</div>
-            <div className="font-comic text-2xl mt-2">{i + 1}. {s.title}</div>
+        {steps.map(s => (
+          <div key={s.n} className="brut p-5" style={{ background: s.color }}>
+            <div className="text-xs font-bold opacity-70">{s.n}</div>
+            <div className="font-comic text-2xl mt-1">{s.title}</div>
             <div className="text-sm font-semibold mt-1">{s.desc}</div>
+          </div>
+        ))}
+      </div>
+      <div className="brut mt-6 p-4 bg-black text-[#FFE156] text-center font-comic text-2xl sm:text-3xl tracking-wide">
+        LIST ↓ PAY ↓ CLIMB ↓ GET DISCOVERED ↓ DEFEND ↓ REPEAT
+      </div>
+    </section>
+  );
+}
+
+function PayingFor() {
+  const cards = [
+    { emoji: '👁', title: 'VISIBILITY', desc: 'Your profile appears on a public competitive leaderboard.', color: '#FFE156' },
+    { emoji: '🔥', title: 'POSITION', desc: 'Higher positions give your profile more prominent placement.', color: '#FF5DA2' },
+    { emoji: '📈', title: 'DISCOVERY', desc: 'Visitors can discover and click through to your social profile.', color: '#4DD4E6' },
+  ];
+  return (
+    <section className="max-w-7xl mx-auto px-3 sm:px-4 py-12">
+      <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl mb-6">What you&apos;re paying for</h2>
+      <div className="grid md:grid-cols-3 gap-4">
+        {cards.map(c => (
+          <div key={c.title} className="brut p-5" style={{ background: c.color }}>
+            <div className="text-4xl">{c.emoji}</div>
+            <div className="font-comic text-2xl mt-2">{c.title}</div>
+            <div className="text-sm font-semibold mt-1">{c.desc}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs font-semibold opacity-80 max-w-3xl">
+        PayToTrend provides visibility on PayToTrend. We do not guarantee Instagram followers, likes, engagement, or algorithmic ranking.
+        PayToTrend sells promotional visibility on PayToTrend. It does not sell followers, likes, comments, or guaranteed engagement.
+      </p>
+    </section>
+  );
+}
+
+function HallOfFame({ hall }) {
+  const { money } = useMoney();
+  if (!hall?.length) return null;
+  return (
+    <section className="max-w-7xl mx-auto px-3 sm:px-4 py-12">
+      <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl mb-5">Hall of Fame</h2>
+      <div className="grid md:grid-cols-2 gap-4">
+        {hall.slice(0, 4).map(h => (
+          <div key={h.id} className="brut p-5 bg-white">
+            <div className="text-[11px] font-bold uppercase opacity-70">🏆 Weekly winners</div>
+            <div className="text-xs font-semibold mb-3">{h.periodEnd ? new Date(h.periodEnd).toLocaleDateString() : ''}</div>
+            {(h.winners || []).map(w => (
+              <div key={w.listingId || w.rank} className="flex justify-between border-b-2 border-dashed border-black py-2 text-sm font-bold">
+                <span>{w.rank === 1 ? '🥇' : w.rank === 2 ? '🥈' : '🥉'} {w.name}</span>
+                <span>{money(w.amount)}</span>
+              </div>
+            ))}
           </div>
         ))}
       </div>
@@ -552,28 +679,36 @@ function Footer() {
     <footer className="border-t-4 border-black bg-black text-white mt-14">
       <div className="max-w-7xl mx-auto px-4 py-10 grid md:grid-cols-4 gap-6">
         <div>
-          <div className="font-comic text-3xl text-[#FFE156]">Donate &amp; Colab</div>
-          <div className="text-sm opacity-80 mt-1">Invest ₹1+. Rank. Connect.</div>
+          <div className="font-comic text-3xl text-[#FFE156]">Pay To Trend</div>
+          <div className="text-sm opacity-80 mt-1">Compete. Climb. Get discovered.</div>
         </div>
         <div className="text-sm space-y-1">
-          <div className="font-bold uppercase text-xs">The 30 / 40 / 30 promise</div>
-          <div className="opacity-80">30% back to the creator, 40% to people in need, 30% for servers and developer payouts. <a href="#impact" className="underline">See the tracker</a>.</div>
+          <div className="font-bold uppercase text-xs">The loop</div>
+          <div className="opacity-80">List → Pay → Climb → Get discovered → Defend your rank.</div>
         </div>
         <div className="text-sm space-y-1">
-          <div className="font-bold uppercase text-xs">Transparency</div>
-          <div className="opacity-80">Paid highlights are always tagged SPONSORED. Every rupee shows up in the public counter.</div>
+          <div className="font-bold uppercase text-xs">Honest visibility</div>
+          <div className="opacity-80">We sell placement on PayToTrend. Not followers, likes, or guaranteed engagement.</div>
         </div>
         <div className="text-sm space-y-1">
           <div className="font-bold uppercase text-xs">Platform</div>
-          <a href="/dashboard" className="block opacity-80 underline">My dashboard</a>
-          <a href="/admin" className="block opacity-80 underline">Admin dashboard</a>
+          <a href="/dashboard" className="block opacity-80 underline">My stats</a>
+          <a href="/admin" className="block opacity-80 underline">Admin</a>
         </div>
       </div>
     </footer>
   );
 }
 
-/* ----------------------------- app ----------------------------- */
+function competitiveBanner(rankings, money) {
+  const one = rankings[0];
+  const two = rankings[1];
+  if (!one) return '🔥 NO ONE IS TRENDING YET — CLAIM #1';
+  if (two && (one.leadOverNext || 0) <= 200) return `⚡ ONLY ${money(one.leadOverNext || two.toTakeOne)} TO TAKE #1`;
+  if (one.rank === 1) return `🔥 #1 ${one.name} IS UNDER ATTACK`;
+  return '⚔️ NEW CHALLENGER CAN TAKE ANY RANK';
+}
+
 function App() {
   const { money } = useMoney();
   const { user, login, logout, refresh } = useAuth();
@@ -581,29 +716,29 @@ function App() {
   const [stats, setStats] = useState({});
   const [activity, setActivity] = useState([]);
   const [rankings, setRankings] = useState([]);
-  const [trending, setTrending] = useState([]);
-  const [impact, setImpact] = useState(null);
+  const [hall, setHall] = useState([]);
   const [category, setCategory] = useState('instagram');
   const [loading, setLoading] = useState(true);
 
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [challenge, setChallenge] = useState(null);
   const [investTarget, setInvestTarget] = useState(null);
-  const [connectTarget, setConnectTarget] = useState(null);
   const [rankCard, setRankCard] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authReason, setAuthReason] = useState('');
   const [pending, setPending] = useState(null);
+  const [overtaken, setOvertaken] = useState(null);
+  const [myListings, setMyListings] = useState([]);
 
   async function loadAll() {
     try {
-      const [c, s, a, t, im] = await Promise.all([
-        api('/categories'), api('/stats'), api('/activity'), api('/trending/instagram'), api('/impact'),
+      const [c, s, a, h] = await Promise.all([
+        api('/categories'), api('/stats'), api('/activity'), api('/hall-of-fame'),
       ]);
-      setImpact(im);
       setCategories(c.categories || []);
       setStats(s);
       setActivity(a.activity || []);
-      setTrending(t.trending || []);
+      setHall(h.hall || []);
     } catch (e) { /* ignore */ }
   }
   async function loadRankings(cat) {
@@ -617,6 +752,19 @@ function App() {
 
   useEffect(() => { loadAll(); }, []);
   useEffect(() => { loadRankings(category); }, [category]);
+  useEffect(() => {
+    const t = setInterval(() => { loadAll(); loadRankings(category); }, 12000);
+    return () => clearInterval(t);
+  }, [category]);
+
+  useEffect(() => {
+    if (!user) return;
+    api('/me/listings').then(d => setMyListings(d.listings || [])).catch(() => {});
+    api('/me/notifications').then(d => {
+      const unread = (d.notifications || []).find(n => !n.read && n.type === 'OVERTAKEN');
+      if (unread) setOvertaken(unread);
+    }).catch(() => {});
+  }, [user]);
 
   const askLogin = (reason, action) => {
     setAuthReason(reason);
@@ -624,26 +772,35 @@ function App() {
     setAuthOpen(true);
   };
 
-  const openInvest = (listing, mode = 'DONATION') => {
-    if (mode === 'SELF_PAY' && !user) {
-      return askLogin('Log in to pay for your rank (so the spend and your 30% share are tracked).', { type: 'invest', listing, mode });
+  const openList = (holder = null, authedUser) => {
+    const u = authedUser || user;
+    if (!u) return askLogin('Log in to start trending and fight for #1.', { type: 'submit', holder });
+    setChallenge(holder);
+    setSubmitOpen(true);
+  };
+
+  const mineIn = (cat) => myListings.find(l => l.category === cat);
+
+  const openTake = (holder, authedUser) => {
+    const u = authedUser || user;
+    if (!u) return askLogin('Log in to take this rank with your profile.', { type: 'take', holder });
+    const cat = holder?.category || category;
+    const mine = mineIn(cat);
+    if (mine) {
+      setInvestTarget({ listing: mine, targetRank: holder?.rank || 1 });
+      return;
     }
-    setInvestTarget({ listing, mode });
+    setChallenge(holder);
+    setSubmitOpen(true);
   };
 
   const onAuthed = async (token, u) => {
     login(token, u);
     setAuthOpen(false);
-    if (pending?.type === 'connect') setConnectTarget(pending.listing);
-    if (pending?.type === 'invest') setInvestTarget({ listing: pending.listing, mode: pending.mode || 'DONATION' });
-    if (pending?.type === 'submit') setSubmitOpen(true);
+    if (pending?.type === 'take') openTake(pending.holder, u);
+    if (pending?.type === 'submit') openList(pending.holder || null, u);
     setPending(null);
     refresh();
-  };
-
-  const handleConnect = (listing) => {
-    if (!user) return askLogin('Log in or register to connect with this creator.', { type: 'connect', listing });
-    setConnectTarget(listing);
   };
 
   const afterMoney = async (listing) => {
@@ -652,33 +809,39 @@ function App() {
     setRankCard(listing);
   };
 
+  const one = rankings[0];
+  const two = rankings[1];
+
   return (
     <div className="min-h-screen">
       <Header
         user={user}
-        onLogin={() => askLogin('Log in to invest, list your work and connect.', null)}
+        onLogin={() => askLogin('Log in to compete, climb and defend your rank.', null)}
         onLogout={async () => { await logout(); toast.success('Logged out'); }}
-        onSubmit={() => (user ? setSubmitOpen(true) : askLogin('Log in to list your app or profile and claim your 30% share.', { type: 'submit' }))}
+        onSubmit={() => openList(null)}
       />
-      <Hero stats={stats} onSubmit={() => (user ? setSubmitOpen(true) : askLogin('Log in to list your app or profile and claim your 30% share.', { type: 'submit' }))} />
+      <Hero stats={stats} one={one} two={two} onSubmit={() => openList(null)} onTake={openTake} />
       <GatheringStrip stats={stats} />
       <div className="mt-8">
         <ActivityMarquee activity={activity} />
       </div>
+      <BattleStrip battle={stats.battle} />
 
-      <InstagramTrending items={trending} onInvest={openInvest} onConnect={handleConnect} />
-
+      <div id="instagram" />
       <section id="leaderboard" className="max-w-7xl mx-auto px-3 sm:px-4 py-10">
         <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
           <div>
             <div className="flex items-center gap-2 mb-2"><TrendingUp size={20} strokeWidth={3} /> <Sticker color="#A0F04D">LIVE</Sticker></div>
-            <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">The funding leaderboard</h2>
-            <p className="text-sm font-semibold mt-1 opacity-80">Ranked by total money gathered — your own payments plus fan donations. Every rupee moves the board.</p>
+            <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">🔥 The trending leaderboard</h2>
+            <p className="text-sm font-semibold mt-1 opacity-80">Everyone is competing for attention. Higher ranks get more visibility on PayToTrend.</p>
           </div>
           <div className="flex items-center gap-2">
             <Users size={16} strokeWidth={3} />
-            <span className="font-semibold text-sm">{stats.viewersOnline || 42} viewing now</span>
+            <span className="font-semibold text-sm">{stats.viewersOnline || 42} PEOPLE WATCHING</span>
           </div>
+        </div>
+        <div className="brut p-3 mb-4 bg-[#FF5DA2] text-white font-comic text-xl sm:text-2xl text-center">
+          {competitiveBanner(rankings, money)}
         </div>
         <CategoryTabs categories={categories} active={category} onChange={setCategory} />
         <div className="mt-5 grid gap-3">
@@ -686,41 +849,73 @@ function App() {
             <div className="brut p-10 text-center font-comic text-3xl">Loading the board...</div>
           ) : rankings.length === 0 ? (
             <div className="brut p-10 text-center">
-              <div className="font-comic text-3xl">Nothing here yet</div>
-              <button onClick={() => setSubmitOpen(true)} className="brut-btn mt-4 px-6 py-3 bg-[#FF5DA2] text-white">Be the first →</button>
+              <div className="flex justify-center mb-8">
+                <TalkCloud>
+                  <div className="font-comic text-xl leading-tight">First to list can claim #1</div>
+                  <p className="text-sm font-bold mt-1">Visibility on PayToTrend — not guaranteed followers.</p>
+                </TalkCloud>
+              </div>
+              <div className="font-comic text-3xl">NO ONE IS TRENDING YET.</div>
+              <p className="mt-2 font-bold">BE THE FIRST TO FIGHT FOR #1.</p>
+              <button onClick={() => openList(null)} className="brut-btn mt-4 px-6 py-3 bg-[#FF5DA2] text-white">🔥 CLAIM #1</button>
             </div>
           ) : (
             rankings.map(l => (
-              <ListingCard key={l.id} listing={l} onInvest={openInvest} onConnect={handleConnect} onShare={setRankCard} />
+              <ListingCard key={l.id} listing={l} onTake={openTake} onShare={setRankCard} />
             ))
           )}
         </div>
       </section>
 
-      <MoneySplit impact={impact} />
-
       <HowItWorks />
+      <PayingFor />
+      <HallOfFame hall={hall} />
 
       <section className="max-w-7xl mx-auto px-3 sm:px-4 py-8">
         <div className="brut-lg p-4 sm:p-8 halftone-yellow flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h3 className="font-comic text-2xl sm:text-3xl md:text-4xl">Total gathering: {money(stats.totalRaised)}</h3>
-            <p className="font-semibold mt-1">You keep 30% of your listing&apos;s gathering, 40% helps people in need ({money(stats.charityPool)} in the fund) and 30% runs the platform.</p>
+            <h3 className="font-comic text-2xl sm:text-3xl md:text-4xl">Compete for attention. Climb. Get discovered.</h3>
+            <p className="font-semibold mt-1">Pay to compete for a higher position on PayToTrend — then defend it when someone challenges you.</p>
           </div>
-          <button onClick={() => (user ? setSubmitOpen(true) : askLogin('Log in to list and start gathering.', { type: 'submit' }))}
-            className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg">Start gathering →</button>
+          <button onClick={() => openList(null)} className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg">🔥 Start Trending</button>
         </div>
       </section>
 
       <Footer />
 
-      <SubmitModal open={submitOpen} onClose={() => setSubmitOpen(false)} categories={categories} user={user}
-        onNeedLogin={() => { setSubmitOpen(false); askLogin('Log in to own this listing.', { type: 'submit' }); }}
-        onCreated={async (l) => { if (l.category) setCategory(l.category); await loadAll(); await loadRankings(l.category || category); if (l.newRank) setRankCard(l); }} />
-      <InvestModal open={!!investTarget} onClose={() => setInvestTarget(null)} listing={investTarget?.listing} mode={investTarget?.mode} user={user} onDone={afterMoney} />
-      <ConnectModal open={!!connectTarget} onClose={() => setConnectTarget(null)} listing={connectTarget}
-        onNeedLogin={(l) => askLogin('Log in or register to connect.', { type: 'connect', listing: l })} />
-      <RankCardModal open={!!rankCard} onClose={() => setRankCard(null)} listing={rankCard} />
+      <SubmitModal
+        open={submitOpen}
+        onClose={() => setSubmitOpen(false)}
+        categories={categories}
+        user={user}
+        challenge={challenge}
+        onNeedLogin={() => { setSubmitOpen(false); askLogin('You need to log in to start trending.', { type: 'submit', holder: challenge }); }}
+        onCreated={async (l) => { if (l.category) setCategory(l.category); await loadAll(); await loadRankings(l.category || category); setRankCard(l); }}
+        onPay={(listing, rank) => setInvestTarget({ listing, targetRank: rank || 1 })}
+      />
+      <InvestModal
+        open={!!investTarget}
+        onClose={() => setInvestTarget(null)}
+        listing={investTarget?.listing}
+        targetRank={investTarget?.targetRank || 1}
+        user={user}
+        onDone={afterMoney}
+      />
+      <RankCardModal open={!!rankCard} onClose={() => setRankCard(null)} listing={rankCard} onAddMoney={(l) => openTake({ ...l, rank: Math.max(1, (l.newRank || l.rank || 2) - 1) })} />
+      <OvertakenModal
+        note={overtaken}
+        onClose={async () => {
+          try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) {}
+          setOvertaken(null);
+        }}
+        onDefend={async () => {
+          try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) {}
+          const listing = myListings.find(l => l.id === overtaken?.listingId);
+          setOvertaken(null);
+          if (listing) setInvestTarget({ listing, targetRank: 1 });
+          else openList(null);
+        }}
+      />
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onAuthed={onAuthed} reason={authReason} />
     </div>
   );

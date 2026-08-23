@@ -8,10 +8,30 @@ import { CURRENCIES, COUNTRY_CURRENCY, BASE_CURRENCY, currencyOf, toBase, toMino
 const MONGO_URL = process.env.MONGO_URL;
 const DB_NAME = process.env.DB_NAME || 'donate_colab';
 
-// How every rupee gathered is split
-const CREATOR_SHARE = 0.3;   // 30% back to the listing owner (maintenance & growth)
-const CHARITY_SHARE = 0.4;   // 40% to help people in need
-const PLATFORM_SHARE = 0.3;  // 30% servers + developer payout
+const MIN_INCREMENT = 100;                 // INR: minimum extra to take a rank
+const PLATFORM_FEE_PCT = 0.10;             // shown at checkout; does not count toward rank
+const COMPETITION_PERIOD_MS = 24 * 60 * 60 * 1000; // MVP: 24 hours
+const FREE_LISTING_LIMIT = 100;
+
+// Legacy split kept only so old admin records still render. Not part of PayToTrend.
+const CREATOR_SHARE = 0;
+const CHARITY_SHARE = 0;
+const PLATFORM_SHARE = 1;
+
+async function listingQuota(db) {
+  const used = await db.collection('listings').countDocuments({
+    status: { $ne: 'REJECTED' },
+    ownerId: { $ne: null },
+  });
+  const remaining = Math.max(0, FREE_LISTING_LIMIT - used);
+  return {
+    limit: FREE_LISTING_LIMIT,
+    used,
+    remaining,
+    freeOpen: remaining > 0,
+    nextNumber: Math.min(used + 1, FREE_LISTING_LIMIT),
+  };
+}
 
 let cachedClient = null;
 async function getDb() {
@@ -65,62 +85,41 @@ const PLANS = {
 };
 
 const CATEGORIES = [
-  { id: 'instagram',   name: 'Instagram',       slug: 'instagram',   emoji: '📸', color: '#FF5DA2' },
-  { id: 'ai-tools',    name: 'AI Tools',        slug: 'ai-tools',    emoji: '🤖', color: '#FFE156' },
-  { id: 'saas',        name: 'SaaS',            slug: 'saas',        emoji: '🚀', color: '#4DD4E6' },
-  { id: 'dev-tools',   name: 'Developer Tools', slug: 'dev-tools',   emoji: '🛠️', color: '#A0F04D' },
-  { id: 'startups',    name: 'Startups',        slug: 'startups',    emoji: '🔥', color: '#FF5C4D' },
-  { id: 'creators',    name: 'Creators',        slug: 'creators',    emoji: '🎨', color: '#B285FF' },
-  { id: 'developers',  name: 'Developers',      slug: 'developers',  emoji: '👨‍💻', color: '#FFB84D' },
-  { id: 'designers',   name: 'Designers',       slug: 'designers',   emoji: '✏️', color: '#4DD4E6' },
+  { id: 'instagram',  name: 'Instagram',  slug: 'instagram',  emoji: '📸', color: '#FF5DA2' },
+  { id: 'creators',   name: 'Creators',   slug: 'creators',   emoji: '🎨', color: '#B285FF' },
+  { id: 'businesses', name: 'Businesses', slug: 'businesses', emoji: '🏢', color: '#4DD4E6' },
+  { id: 'artists',    name: 'Artists',    slug: 'artists',    emoji: '🎵', color: '#FF5DA2' },
+  { id: 'startups',   name: 'Startups',   slug: 'startups',   emoji: '🚀', color: '#FF5C4D' },
+  { id: 'products',   name: 'Products',   slug: 'products',   emoji: '🛍', color: '#FFB84D' },
 ];
 
 const SEED_LISTINGS = [
-  // Instagram trending profiles
-  { name: '@reelqueen.ananya', tagline: 'Daily reels • 180k followers • fashion', category: 'instagram', logo: '👑', website: 'https://instagram.com/reelqueen.ananya', raised: 4820, type: 'PROFILE' },
-  { name: '@streetfoodwala',   tagline: 'Street food raids across India 🍜', category: 'instagram', logo: '🍜', website: 'https://instagram.com/streetfoodwala', raised: 3610, type: 'PROFILE' },
-  { name: '@fitwithrohan',     tagline: 'Home workouts • no gym needed', category: 'instagram', logo: '💪', website: 'https://instagram.com/fitwithrohan', raised: 2950, type: 'PROFILE' },
-  { name: '@wander.with.mira', tagline: 'Solo travel diaries • 60 countries', category: 'instagram', logo: '🌍', website: 'https://instagram.com/wander.with.mira', raised: 2240, type: 'PROFILE' },
-  { name: '@sketch.by.dev',    tagline: 'Pencil art timelapses every night', category: 'instagram', logo: '✏️', website: 'https://instagram.com/sketch.by.dev', raised: 1780, type: 'PROFILE' },
-  { name: '@memeboy.official', tagline: 'Desi memes • 1M reach/week', category: 'instagram', logo: '😂', website: 'https://instagram.com/memeboy.official', raised: 1320, type: 'PROFILE' },
-  { name: '@thecoffeediary',   tagline: 'Cafe reviews + brewing tips ☕', category: 'instagram', logo: '☕', website: 'https://instagram.com/thecoffeediary', raised: 860, type: 'PROFILE' },
-  { name: '@dance.with.sia',   tagline: 'Choreography reels • trending audio', category: 'instagram', logo: '💃', website: 'https://instagram.com/dance.with.sia', raised: 410, type: 'PROFILE' },
+  { name: '@reelqueen.ananya', displayName: 'Ananya Rao', tagline: 'Daily reels • fashion & beauty', category: 'instagram', logo: '👑', website: 'https://instagram.com/reelqueen.ananya', handle: 'reelqueen.ananya', network: 'instagram', raised: 5200, views: 12430, clicks: 1240, type: 'PROFILE' },
+  { name: '@streetfoodwala',   displayName: 'Rahul Khana', tagline: 'Street food raids across India', category: 'instagram', logo: '🍜', website: 'https://instagram.com/streetfoodwala', handle: 'streetfoodwala', network: 'instagram', raised: 5000, views: 9820, clicks: 980, type: 'PROFILE' },
+  { name: '@fitwithrohan',     displayName: 'Rohan Fit', tagline: 'Home workouts • no gym needed', category: 'instagram', logo: '💪', website: 'https://instagram.com/fitwithrohan', handle: 'fitwithrohan', network: 'instagram', raised: 4100, views: 7420, clicks: 610, type: 'PROFILE' },
+  { name: '@wander.with.mira', displayName: 'Mira Sen', tagline: 'Solo travel diaries', category: 'instagram', logo: '🌍', website: 'https://instagram.com/wander.with.mira', handle: 'wander.with.mira', network: 'instagram', raised: 2240, views: 5310, clicks: 420, type: 'PROFILE' },
+  { name: '@memeboy.official', displayName: 'Meme Boy', tagline: 'Desi memes • daily drops', category: 'instagram', logo: '😂', website: 'https://instagram.com/memeboy.official', handle: 'memeboy.official', network: 'instagram', raised: 1320, views: 8900, clicks: 1100, type: 'PROFILE' },
+  { name: '@thecoffeediary',   displayName: 'The Coffee Diary', tagline: 'Cafe reviews + brewing tips', category: 'instagram', logo: '☕', website: 'https://instagram.com/thecoffeediary', handle: 'thecoffeediary', network: 'instagram', raised: 860, views: 2100, clicks: 180, type: 'PROFILE' },
 
-  { name: 'NeuroWrite', tagline: 'AI copywriter that never sleeps', category: 'ai-tools', logo: '✍️', website: 'https://neurowrite.ai', raised: 5500 },
-  { name: 'PixelForge AI', tagline: 'Generate product photos in seconds', category: 'ai-tools', logo: '🖼️', website: 'https://pixelforge.ai', raised: 4200 },
-  { name: 'ChatMate Pro', tagline: 'Multi-model chat playground', category: 'ai-tools', logo: '💬', website: 'https://chatmate.pro', raised: 2850 },
-  { name: 'VoiceCraft', tagline: 'Clone any voice in 60s', category: 'ai-tools', logo: '🎤', website: 'https://voicecraft.io', raised: 1700 },
-  { name: 'SummaryBot', tagline: 'Turn 2hr meetings into 60s recaps', category: 'ai-tools', logo: '🧠', website: 'https://summarybot.ai', raised: 1099 },
-  { name: 'PromptPilot', tagline: 'Prompt library + version control', category: 'ai-tools', logo: '🧭', website: 'https://promptpilot.dev', raised: 640 },
-  { name: 'AutoResearch', tagline: 'Agentic web research assistant', category: 'ai-tools', logo: '🔍', website: 'https://autoresearch.co', raised: 380 },
-  { name: 'ClipGenie', tagline: 'AI shorts from long videos', category: 'ai-tools', logo: '🎬', website: 'https://clipgenie.io', raised: 199 },
+  { name: '@aria.builds',   displayName: 'Aria', tagline: 'Building in public', category: 'creators', logo: '🌟', website: 'https://instagram.com/aria.builds', handle: 'aria.builds', network: 'instagram', raised: 1850, views: 4200, clicks: 310, type: 'PROFILE' },
+  { name: '@makerkev',      displayName: 'Maker Kev', tagline: 'Indie hacker • product clips', category: 'creators', logo: '😎', website: 'https://instagram.com/makerkev', handle: 'makerkev', network: 'instagram', raised: 900, views: 1800, clicks: 140, type: 'PROFILE' },
+  { name: '@zoe.codes',     displayName: 'Zoe', tagline: 'Shipping fast • creator tools', category: 'creators', logo: '👩‍💻', website: 'https://instagram.com/zoe.codes', handle: 'zoe.codes', network: 'instagram', raised: 250, views: 960, clicks: 70, type: 'PROFILE' },
 
-  { name: 'InvoiceZap', tagline: 'Send invoices in 10 seconds flat', category: 'saas', logo: '💸', website: 'https://invoicezap.com', raised: 3400 },
-  { name: 'DeskFlow', tagline: 'Customer support inbox reimagined', category: 'saas', logo: '📬', website: 'https://deskflow.io', raised: 1999 },
-  { name: 'CRMly', tagline: 'CRM that founders actually use', category: 'saas', logo: '📊', website: 'https://crmly.app', raised: 1200 },
-  { name: 'SchedulePop', tagline: 'Calendar for busy teams', category: 'saas', logo: '📅', website: 'https://schedulepop.com', raised: 750 },
-  { name: 'FormWave', tagline: 'Beautiful forms, zero code', category: 'saas', logo: '📝', website: 'https://formwave.io', raised: 350 },
-  { name: 'MailPunch', tagline: 'Cold email that lands in inbox', category: 'saas', logo: '📧', website: 'https://mailpunch.co', raised: 120 },
+  { name: 'InvoiceZap',  displayName: 'InvoiceZap', tagline: 'Send invoices in 10 seconds', category: 'businesses', logo: '💸', website: 'https://instagram.com/invoicezap', handle: 'invoicezap', network: 'instagram', raised: 3400, views: 6100, clicks: 520 },
+  { name: 'DeskFlow',    displayName: 'DeskFlow', tagline: 'Support inbox, rebuilt', category: 'businesses', logo: '📬', website: 'https://instagram.com/deskflow', handle: 'deskflow', network: 'instagram', raised: 1999, views: 2800, clicks: 210 },
+  { name: 'CRMly',       displayName: 'CRMly', tagline: 'CRM founders actually use', category: 'businesses', logo: '📊', website: 'https://instagram.com/crmly', handle: 'crmly', network: 'instagram', raised: 1200, views: 1500, clicks: 90 },
 
-  { name: 'DeployKit', tagline: 'One-click deploys for indie devs', category: 'dev-tools', logo: '🚀', website: 'https://deploykit.dev', raised: 2300 },
-  { name: 'LogLens', tagline: "Structured logs that don't suck", category: 'dev-tools', logo: '🔎', website: 'https://loglens.dev', raised: 1400 },
-  { name: 'DBSnap', tagline: 'Postgres branching in a click', category: 'dev-tools', logo: '💾', website: 'https://dbsnap.io', raised: 600 },
-  { name: 'AuthBox', tagline: 'Drop-in auth for any framework', category: 'dev-tools', logo: '🔐', website: 'https://authbox.dev', raised: 450 },
-  { name: 'CronCloud', tagline: 'Scheduled jobs without servers', category: 'dev-tools', logo: '⏰', website: 'https://croncloud.io', raised: 60 },
+  { name: '@sketch.by.dev',  displayName: 'Dev Sketch', tagline: 'Pencil art timelapses', category: 'artists', logo: '✏️', website: 'https://instagram.com/sketch.by.dev', handle: 'sketch.by.dev', network: 'instagram', raised: 1780, views: 6400, clicks: 540, type: 'PROFILE' },
+  { name: '@dance.with.sia', displayName: 'Sia Dance', tagline: 'Choreography reels', category: 'artists', logo: '💃', website: 'https://instagram.com/dance.with.sia', handle: 'dance.with.sia', network: 'instagram', raised: 1410, views: 7200, clicks: 880, type: 'PROFILE' },
+  { name: '@design.daily',   displayName: 'Design Daily', tagline: 'UI teardowns every morning', category: 'artists', logo: '🎨', website: 'https://instagram.com/designdaily', handle: 'designdaily', network: 'instagram', raised: 640, views: 1900, clicks: 150, type: 'PROFILE' },
 
-  { name: 'GreenLeaf', tagline: 'Carbon-neutral SaaS billing', category: 'startups', logo: '🌱', website: 'https://greenleaf.eco', raised: 3100 },
-  { name: 'RocketDocs', tagline: 'Docs for shipping teams', category: 'startups', logo: '📚', website: 'https://rocketdocs.io', raised: 1700 },
-  { name: 'FundedFast', tagline: 'Match founders with angels', category: 'startups', logo: '💰', website: 'https://fundedfast.com', raised: 900 },
-  { name: 'TeamPulse', tagline: 'Remote culture, quantified', category: 'startups', logo: '💓', website: 'https://teampulse.hr', raised: 300 },
+  { name: 'GreenLeaf',  displayName: 'GreenLeaf', tagline: 'Climate-first billing', category: 'startups', logo: '🌱', website: 'https://instagram.com/greenleaf', handle: 'greenleaf', network: 'instagram', raised: 3100, views: 4400, clicks: 300 },
+  { name: 'RocketDocs', displayName: 'RocketDocs', tagline: 'Docs for shipping teams', category: 'startups', logo: '📚', website: 'https://instagram.com/rocketdocs', handle: 'rocketdocs', network: 'instagram', raised: 1700, views: 2200, clicks: 160 },
+  { name: 'FundedFast', displayName: 'FundedFast', tagline: 'Founders meeting angels', category: 'startups', logo: '🚀', website: 'https://instagram.com/fundedfast', handle: 'fundedfast', network: 'instagram', raised: 900, views: 1100, clicks: 80 },
 
-  { name: '@aria.builds',   tagline: 'Building in public • 42k on X', category: 'creators', logo: '🌟', website: 'https://x.com/ariabuilds', raised: 1850, type: 'PROFILE' },
-  { name: '@makerkev',      tagline: 'Indie hacker • SaaS memes', category: 'creators', logo: '😎', website: 'https://x.com/makerkev', raised: 900, type: 'PROFILE' },
-  { name: '@design.daily',  tagline: 'UI teardowns every morning', category: 'creators', logo: '🎨', website: 'https://instagram.com/designdaily', raised: 640, type: 'PROFILE' },
-  { name: '@zoe.codes',     tagline: 'React tips • shipping fast', category: 'creators', logo: '👩‍💻', website: 'https://x.com/zoecodes', raised: 250, type: 'PROFILE' },
-
-  { name: '@raj.dev',       tagline: 'Rust + distributed systems', category: 'developers', logo: '🦀', website: 'https://github.com/rajdev', raised: 1250, type: 'PROFILE' },
-  { name: '@lena.ships',    tagline: 'Full-stack • Next.js expert', category: 'developers', logo: '⛵', website: 'https://github.com/lenaships', raised: 400, type: 'PROFILE' },
-  { name: '@marco.designs', tagline: 'Product designer • ex-Airbnb', category: 'designers', logo: '✨', website: 'https://dribbble.com/marco', raised: 700, type: 'PROFILE' },
+  { name: 'NeuroWrite',    displayName: 'NeuroWrite', tagline: 'AI copy that never sleeps', category: 'products', logo: '✍️', website: 'https://instagram.com/neurowrite', handle: 'neurowrite', network: 'instagram', raised: 2500, views: 3800, clicks: 290 },
+  { name: 'PixelForge AI', displayName: 'PixelForge', tagline: 'Product photos in seconds', category: 'products', logo: '🖼️', website: 'https://instagram.com/pixelforge', handle: 'pixelforge', network: 'instagram', raised: 1700, views: 2100, clicks: 175 },
+  { name: 'ClipGenie',     displayName: 'ClipGenie', tagline: 'Shorts from long videos', category: 'products', logo: '🎬', website: 'https://instagram.com/clipgenie', handle: 'clipgenie', network: 'instagram', raised: 199, views: 800, clicks: 40 },
 ];
 
 const BACKER_NAMES = ['Aarav', 'Priya', 'Rohit', 'Sneha', 'Kabir', 'Meera', 'Dev', 'Ishita', 'Arjun', 'Nisha', 'Vikram', 'Tara', 'Anonymous Angel', 'Zoya', 'Sam'];
@@ -131,11 +130,220 @@ function slugify(s) {
 function creatorShare(raised) { return Math.round((raised || 0) * CREATOR_SHARE); }
 function charityShare(raised) { return Math.round((raised || 0) * CHARITY_SHARE); }
 function platformShare(raised) { return (raised || 0) - creatorShare(raised) - charityShare(raised); }
+function platformFeeOn(amount) { return Math.round((amount || 0) * PLATFORM_FEE_PCT); }
 const SPLIT = {
   creatorPct: CREATOR_SHARE * 100,
   charityPct: CHARITY_SHARE * 100,
   platformPct: PLATFORM_SHARE * 100,
+  feePct: PLATFORM_FEE_PCT * 100,
+  minIncrement: MIN_INCREMENT,
 };
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function withCategoryLock(db, category, fn) {
+  const _id = 'lock:rank:' + (category || 'all');
+  const ttlMs = 12000;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const now = Date.now();
+    const expiresAt = now + ttlMs;
+    try {
+      const existing = await db.collection('locks').findOne({ _id });
+      if (!existing) {
+        await db.collection('locks').insertOne({ _id, expiresAt });
+      } else if (existing.expiresAt <= now) {
+        const res = await db.collection('locks').updateOne(
+          { _id, expiresAt: existing.expiresAt },
+          { $set: { expiresAt } }
+        );
+        if (!res.modifiedCount) {
+          await sleep(80 + Math.random() * 120);
+          continue;
+        }
+      } else {
+        await sleep(80 + Math.random() * 120);
+        continue;
+      }
+      try {
+        return await fn();
+      } finally {
+        await db.collection('locks').updateOne({ _id }, { $set: { expiresAt: 0 } });
+      }
+    } catch (e) {
+      if (e.code !== 11000) throw e;
+      await sleep(80 + Math.random() * 120);
+    }
+  }
+  const err = new Error('This rank is being challenged right now. Try again in a moment.');
+  err.status = 409;
+  err.code = 'RANK_BUSY';
+  throw err;
+}
+
+function minBidForTarget(ranked, myId, targetRank) {
+  const me = myId ? ranked.find(l => l.id === myId) : null;
+  const myScore = me?.score || 0;
+  const idx = Math.max(0, (Number(targetRank) || 1) - 1);
+  const target = ranked[idx];
+  if (!ranked.length) return MIN_INCREMENT;
+  if (!target) {
+    const last = ranked[ranked.length - 1];
+    return Math.max(MIN_INCREMENT, (last?.score || 0) - myScore + MIN_INCREMENT);
+  }
+  if (myId && target.id === myId) return MIN_INCREMENT;
+  return Math.max(MIN_INCREMENT, (target.score || 0) - myScore + MIN_INCREMENT);
+}
+
+function publicListingExtras(ranked) {
+  return ranked.map((l, i) => {
+    const above = i > 0 ? ranked[i - 1] : null;
+    const below = ranked[i + 1] || null;
+    const gapBehind = above ? Math.max(0, (above.score || 0) - (l.score || 0)) : 0;
+    const leadOverNext = below ? Math.max(0, (l.score || 0) - (below.score || 0)) : 0;
+    return {
+      ...l,
+      rank: i + 1,
+      displayName: l.displayName || l.name,
+      handle: l.handle || String(l.name || '').replace(/^@/, ''),
+      views: l.views || 0,
+      clicks: l.clicks || 0,
+      gapBehind,
+      leadOverNext,
+      toTakeThis: (l.score || 0) + MIN_INCREMENT,
+      toTakeOne: i === 0 ? 0 : Math.max(MIN_INCREMENT, (ranked[0].score || 0) - (l.score || 0) + MIN_INCREMENT),
+      toBeatAbove: above ? Math.max(MIN_INCREMENT, above.score - (l.score || 0) + MIN_INCREMENT) : 0,
+      toBeatTop: i === 0 ? 0 : Math.max(MIN_INCREMENT, (ranked[0].score || 0) - (l.score || 0) + MIN_INCREMENT),
+      aboveName: above?.name || '',
+      topName: ranked[0]?.name || '',
+      isTop: i === 0,
+      trendingUntil: l.trendingUntil || null,
+    };
+  });
+}
+
+async function rankedCategory(db, category) {
+  const q = { status: { $ne: 'REJECTED' } };
+  if (category && category !== 'all') q.category = category;
+  const listings = await db.collection('listings').find(q, { projection: { _id: 0 } }).toArray();
+  const enriched = await enrichListings(db, listings);
+  enriched.sort((a, b) => {
+    if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
+    const aPaid = a.lastPaidAt ? new Date(a.lastPaidAt).getTime() : 0;
+    const bPaid = b.lastPaidAt ? new Date(b.lastPaidAt).getTime() : 0;
+    if (aPaid !== bPaid) return aPaid - bPaid; // first to reach this score wins
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  });
+  return publicListingExtras(enriched);
+}
+
+async function quoteChallenge(db, { category, listingId, targetRank = 1 }) {
+  const ranked = await rankedCategory(db, category);
+  const me = listingId ? ranked.find(l => l.id === listingId) : null;
+  const rank = Math.max(1, Math.min(5, Number(targetRank) || 1));
+  const holder = ranked[rank - 1] || null;
+  const minBid = minBidForTarget(ranked, listingId, rank);
+  const myAmount = me?.score || 0;
+  const newTotal = myAmount + minBid;
+  const fee = platformFeeOn(minBid);
+  return {
+    category,
+    targetRank: rank,
+    listingId: listingId || null,
+    myRank: me?.rank || null,
+    myAmount,
+    currentHolder: holder ? { id: holder.id, name: holder.name, handle: holder.handle, amount: holder.score, rank: holder.rank } : null,
+    currentAmount: holder?.score || 0,
+    minBid,
+    minIncrement: MIN_INCREMENT,
+    newTotal,
+    platformFee: fee,
+    platformFeePct: PLATFORM_FEE_PCT * 100,
+    totalCharge: minBid + fee,
+    top5: ranked.slice(0, 5).map(l => ({
+      id: l.id, rank: l.rank, name: l.name, handle: l.handle, amount: l.score, image: l.image || '', logo: l.logo,
+    })),
+    isDefend: !!(me && me.rank && me.rank > rank),
+    empty: ranked.length === 0,
+  };
+}
+
+async function ensureBattle(db) {
+  const now = new Date();
+  let b = await db.collection('meta').findOne({ _id: 'battle' });
+  if (!b) {
+    b = {
+      _id: 'battle',
+      periodMs: COMPETITION_PERIOD_MS,
+      startAt: now,
+      endAt: new Date(now.getTime() + COMPETITION_PERIOD_MS),
+      label: '24-HOUR TRENDING BATTLE',
+    };
+    await db.collection('meta').insertOne(b);
+    return b;
+  }
+  if (now >= new Date(b.endAt)) {
+    const ranked = await rankedCategory(db, 'all');
+    const winners = ranked.slice(0, 3).map(l => ({
+      rank: l.rank, listingId: l.id, name: l.name, handle: l.handle, logo: l.logo,
+      image: l.image || '', amount: l.score, views: l.views || 0,
+    }));
+    await db.collection('hall_of_fame').insertOne({
+      id: uuidv4(),
+      periodStart: b.startAt,
+      periodEnd: b.endAt,
+      winners,
+      createdAt: now,
+    });
+    const startAt = now;
+    const endAt = new Date(now.getTime() + (b.periodMs || COMPETITION_PERIOD_MS));
+    await db.collection('meta').updateOne({ _id: 'battle' }, { $set: { startAt, endAt } });
+    return { ...b, startAt, endAt, justRolled: true, lastWinners: winners };
+  }
+  return b;
+}
+
+async function notifyRankShifts(db, beforeMap, afterRanked, challenger) {
+  const now = new Date();
+  for (const after of afterRanked) {
+    const prev = beforeMap[after.id];
+    if (!prev) continue;
+    if (after.rank < (prev.highestRank || prev.rank || 999)) {
+      await db.collection('listings').updateOne({ id: after.id }, { $set: { highestRank: after.rank } });
+    }
+    if (prev.rank === 1 && after.rank > 1) {
+      await db.collection('listings').updateOne({ id: after.id }, {
+        $inc: { timesOvertaken: 1 },
+        $set: { numberOneSince: null },
+      });
+      if (after.ownerId) {
+        const holdMs = prev.numberOneSince ? Math.max(0, now.getTime() - new Date(prev.numberOneSince).getTime()) : 0;
+        if (holdMs) await db.collection('listings').updateOne({ id: after.id }, { $inc: { numberOneMs: holdMs } });
+        const defendQuote = await quoteChallenge(db, {
+          category: after.category, listingId: after.id, targetRank: 1,
+        });
+        await db.collection('notifications').insertOne({
+          id: uuidv4(),
+          userId: after.ownerId,
+          type: 'OVERTAKEN',
+          listingId: after.id,
+          listingName: after.name,
+          fromRank: 1,
+          toRank: after.rank,
+          challengerName: challenger?.name || 'Someone',
+          challengerHandle: challenger?.handle || '',
+          currentAmount: defendQuote.currentAmount,
+          defendAmount: defendQuote.minBid,
+          defendTotal: defendQuote.newTotal,
+          read: false,
+          createdAt: now,
+        });
+      }
+    }
+    if (after.rank === 1 && prev.rank !== 1) {
+      await db.collection('listings').updateOne({ id: after.id }, { $set: { numberOneSince: now, highestRank: 1 } });
+    }
+  }
+}
 
 /* ------------------------- enrichment ------------------------- */
 async function enrichListings(db, listings) {
@@ -164,77 +372,173 @@ async function enrichListings(db, listings) {
       selfPaid: l.selfPaid || 0,
       donated: l.donated || 0,
       backers: l.backers || 0,
+      views: l.views || 0,
+      clicks: l.clicks || 0,
+      timesOvertaken: l.timesOvertaken || 0,
+      highestRank: l.highestRank || null,
+      numberOneMs: l.numberOneMs || 0,
+      numberOneSince: l.numberOneSince || null,
+      displayName: l.displayName || l.name,
+      handle: l.handle || String(l.name || '').replace(/^@/, ''),
       boost,
       score: raised + boost,
       creatorShare: creatorShare(raised),
       paidOut: paidMap[l.id] || 0,
       sponsored: boost > 0,
-      promotionExpiry: expiryMap[l.id] || null,
+      promotionExpiry: expiryMap[l.id] || l.trendingUntil || null,
+      trendingUntil: l.trendingUntil || expiryMap[l.id] || null,
     };
   });
+}
+
+function sortByScore(listings) {
+  return [...listings].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  });
+}
+
+async function rankSnapshot(db, listing) {
+  const sameCat = await db.collection('listings')
+    .find({ category: listing.category, status: { $ne: 'REJECTED' } }).toArray();
+  const ranked = sortByScore(await enrichListings(db, sameCat));
+  const idx = ranked.findIndex(l => l.id === listing.id);
+  const me = ranked[idx] || { score: 0 };
+  const top = ranked[0];
+  const above = idx > 0 ? ranked[idx - 1] : null;
+  return {
+    rank: idx >= 0 ? idx + 1 : ranked.length,
+    categoryCount: ranked.length,
+    myScore: me.score || 0,
+    topName: top?.name || '',
+    topScore: top?.score || 0,
+    aboveName: above?.name || '',
+    toBeatTop: idx === 0 ? 0 : Math.max(MIN_INCREMENT, (top?.score || 0) - (me.score || 0) + MIN_INCREMENT),
+    toBeatAbove: above ? Math.max(MIN_INCREMENT, above.score - (me.score || 0) + MIN_INCREMENT) : 0,
+    isTop: idx === 0,
+  };
+}
+
+async function attachRanks(db, listings) {
+  const cats = [...new Set(listings.map(l => l.category).filter(Boolean))];
+  const extra = {};
+  await Promise.all(cats.map(async (cat) => {
+    const sameCat = await db.collection('listings')
+      .find({ category: cat, status: { $ne: 'REJECTED' } }).toArray();
+    const ranked = sortByScore(await enrichListings(db, sameCat));
+    ranked.forEach((item, i) => {
+      extra[item.id] = {
+        rank: i + 1,
+        categoryCount: ranked.length,
+        isTop: i === 0,
+        aboveName: i > 0 ? ranked[i - 1].name : '',
+        topName: ranked[0]?.name || '',
+        toBeatTop: i === 0 ? 0 : Math.max(MIN_INCREMENT, ranked[0].score - item.score + MIN_INCREMENT),
+        toBeatAbove: i > 0 ? Math.max(MIN_INCREMENT, ranked[i - 1].score - item.score + MIN_INCREMENT) : 0,
+      };
+    });
+  }));
+  return listings.map(l => ({ ...l, ...(extra[l.id] || { rank: null }) }));
 }
 
 
 /* ------------------------- crediting a payment (shared by MOCK + Stripe) ------------------------- */
 async function applyContribution(db, opts) {
-  const { listing, amount, kind, user, backerName, message, anonymous, plan, provider, providerRef, paymentId } = opts;
+  const { listing, amount, kind, user, backerName, message, anonymous, plan, provider, providerRef, paymentId, targetRank } = opts;
   const now = new Date();
+  const cat = listing.category;
 
-  const contribution = {
-    id: uuidv4(),
-    listingId: listing.id,
-    listingName: listing.name,
-    userId: user?.id || null,
-    kind,
-    backerName: kind === 'SELF_PAY'
-      ? 'Owner (self-paid)'
-      : (anonymous ? 'Anonymous' : (backerName || user?.name || 'Anonymous')),
-    amount,
-    message: String(message || '').slice(0, 200),
-    provider: provider || 'MOCK',
-    providerRef: providerRef || null,
-    status: 'SUCCESS',
-    paymentId: paymentId || null,
-    createdAt: now,
-  };
-  await db.collection('contributions').insertOne(contribution);
+  return withCategoryLock(db, cat, async () => {
+    const fresh = await db.collection('listings').findOne({ id: listing.id });
+    if (!fresh) throw new Error('listing not found');
 
-  const inc = { totalRaised: amount, backers: 1 };
-  if (kind === 'SELF_PAY') inc.selfPaid = amount; else inc.donated = amount;
-  await db.collection('listings').updateOne({ id: listing.id }, { $inc: inc });
-
-  await db.collection('rank_events').insertOne({
-    id: uuidv4(), listingId: listing.id, listingName: listing.name,
-    eventType: kind, amount, backerName: contribution.backerName, recordedAt: now,
-  });
-
-  if (plan && PLANS[plan]) {
-    const pl = PLANS[plan];
-    await db.collection('promotions').insertOne({
-      id: uuidv4(), listingId: listing.id, paymentId: paymentId || null, plan: pl.id, amount,
-      startAt: now, endAt: new Date(now.getTime() + pl.duration), active: true, createdAt: now,
+    const beforeRanked = await rankedCategory(db, cat);
+    const beforeMap = Object.fromEntries(beforeRanked.map(l => [l.id, l]));
+    const quote = await quoteChallenge(db, {
+      category: cat,
+      listingId: fresh.id,
+      targetRank: targetRank || 1,
     });
-  }
 
-  const sameCat = await db.collection('listings')
-    .find({ category: listing.category, status: { $ne: 'REJECTED' } }).toArray();
-  const enriched = await enrichListings(db, sameCat);
-  enriched.sort((a, b) => b.score - a.score);
-  const newRank = enriched.findIndex(l => l.id === listing.id) + 1;
-  const updated = enriched.find(l => l.id === listing.id);
+    const contribution = {
+      id: uuidv4(),
+      listingId: fresh.id,
+      listingName: fresh.name,
+      userId: user?.id || null,
+      kind: kind === 'DONATION' ? 'SELF_PAY' : (kind || 'SELF_PAY'),
+      backerName: backerName || user?.name || fresh.name,
+      amount,
+      fee: platformFeeOn(amount),
+      message: String(message || '').slice(0, 200),
+      provider: provider || 'MOCK',
+      providerRef: providerRef || null,
+      status: 'SUCCESS',
+      paymentId: paymentId || null,
+      createdAt: now,
+    };
+    await db.collection('contributions').insertOne(contribution);
 
-  return {
-    contribution,
-    newRank,
-    totalRaised: updated?.raised || amount,
-    selfPaid: updated?.selfPaid || 0,
-    donated: updated?.donated || 0,
-    creatorShare: updated?.creatorShare || creatorShare(amount),
-  };
+    const trendingUntil = new Date(now.getTime() + COMPETITION_PERIOD_MS);
+    const inc = { totalRaised: amount, backers: 1, selfPaid: amount };
+    await db.collection('listings').updateOne({ id: fresh.id }, {
+      $inc: inc,
+      $set: { lastPaidAt: now, trendingUntil },
+    });
+
+    const eventType = (beforeMap[fresh.id]?.rank === 1) ? 'DEFENDED' : 'TOOK_RANK';
+    await db.collection('rank_events').insertOne({
+      id: uuidv4(), listingId: fresh.id, listingName: fresh.name,
+      eventType, amount, backerName: contribution.backerName, recordedAt: now,
+      targetRank: targetRank || 1,
+    });
+
+    if (plan && PLANS[plan]) {
+      const pl = PLANS[plan];
+      await db.collection('promotions').insertOne({
+        id: uuidv4(), listingId: fresh.id, paymentId: paymentId || null, plan: pl.id, amount,
+        startAt: now, endAt: new Date(now.getTime() + pl.duration), active: true, createdAt: now,
+      });
+    }
+
+    const afterRanked = await rankedCategory(db, cat);
+    const updated = afterRanked.find(l => l.id === fresh.id);
+    const newRank = updated?.rank || afterRanked.length;
+    const missedTarget = quote.targetRank && newRank > quote.targetRank;
+
+    await notifyRankShifts(db, beforeMap, afterRanked, {
+      ...fresh, handle: fresh.handle || String(fresh.name || '').replace(/^@/, ''),
+    });
+
+    if (newRank === 1) {
+      await db.collection('listings').updateOne({ id: fresh.id }, {
+        $set: { numberOneSince: now, highestRank: 1 },
+      });
+    } else if (updated && (!updated.highestRank || newRank < updated.highestRank)) {
+      await db.collection('listings').updateOne({ id: fresh.id }, { $set: { highestRank: newRank } });
+    }
+
+    const freshQuote = await quoteChallenge(db, { category: cat, listingId: fresh.id, targetRank: 1 });
+
+    return {
+      contribution,
+      newRank,
+      previousRank: beforeMap[fresh.id]?.rank || null,
+      totalRaised: updated?.raised || amount,
+      selfPaid: updated?.selfPaid || amount,
+      donated: 0,
+      creatorShare: 0,
+      quoteAtPay: quote,
+      quoteNow: freshQuote,
+      missedTarget: !!missedTarget,
+      minBidWas: quote.minBid,
+      amountApplied: amount,
+      movedUp: beforeMap[fresh.id] ? Math.max(0, (beforeMap[fresh.id].rank || newRank) - newRank) : 0,
+    };
+  });
 }
 
 /* ------------------------- seeding ------------------------- */
-const SEED_VERSION = 5;
+const SEED_VERSION = 6;
 const ADMIN_EMAIL = 'admin@donatecolab.com';
 const ADMIN_PASSWORD = 'Admin@123';
 
@@ -284,28 +588,35 @@ async function seedIfNeeded(db) {
       }
       return { seeded: false, timeout: true };
     }
-    for (const c of ['listings', 'promotions', 'contributions', 'rank_events', 'payments', 'payouts']) {
+    for (const c of ['listings', 'promotions', 'contributions', 'rank_events', 'payments', 'payouts', 'notifications', 'hall_of_fame']) {
       await db.collection(c).deleteMany({});
     }
     const now = new Date();
+    await db.collection('meta').updateOne(
+      { _id: 'battle' },
+      { $set: { periodMs: COMPETITION_PERIOD_MS, startAt: now, endAt: new Date(now.getTime() + COMPETITION_PERIOD_MS), label: '24-HOUR TRENDING BATTLE' } },
+      { upsert: true }
+    );
     const listings = [];
     const contributions = [];
     const promotions = [];
     const events = [];
     for (const s of SEED_LISTINGS) {
       const id = uuidv4();
-      const selfPaid = Math.round(s.raised * 0.4);
-      const donatedTotal = s.raised - selfPaid;
-      const parts = splitAmount(donatedTotal);
+      const selfPaid = s.raised;
+      const donatedTotal = 0;
       listings.push({
         id,
-        type: s.type || 'PRODUCT',
+        type: s.type || 'PROFILE',
         name: s.name,
+        displayName: s.displayName || s.name,
         slug: slugify(s.name),
         tagline: s.tagline,
         description: s.tagline,
         logo: s.logo,
         website: s.website,
+        handle: s.handle || String(s.name || '').replace(/^@/, ''),
+        network: s.network || 'instagram',
         contactEmail: s.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 14) + '@example.com',
         category: s.category,
         socials: {},
@@ -316,8 +627,15 @@ async function seedIfNeeded(db) {
         totalRaised: s.raised,
         selfPaid,
         donated: donatedTotal,
-        backers: parts.length + (selfPaid > 0 ? 1 : 0),
+        backers: 1,
         connects: Math.floor(Math.random() * 40),
+        views: s.views || Math.floor(Math.random() * 5000) + 200,
+        clicks: s.clicks || Math.floor(Math.random() * 400) + 20,
+        timesOvertaken: Math.floor(Math.random() * 6),
+        highestRank: 1,
+        numberOneMs: Math.floor(Math.random() * 8 * 3600000),
+        trendingUntil: new Date(now.getTime() + (4 + Math.floor(Math.random() * 20)) * 3600 * 1000),
+        lastPaidAt: new Date(now.getTime() - Math.floor(Math.random() * 12 * 3600 * 1000)),
         createdAt: new Date(now.getTime() - Math.floor(Math.random() * 30 * 24 * 3600 * 1000)),
       });
       if (selfPaid > 0) {
@@ -332,18 +650,9 @@ async function seedIfNeeded(db) {
           backerName: s.name, amount: selfPaid, recordedAt: at,
         });
       }
-      parts.forEach((amt, idx) => {
-        const at = new Date(now.getTime() - Math.floor(Math.random() * 10 * 24 * 3600 * 1000));
-        contributions.push({
-          id: uuidv4(), listingId: id, listingName: s.name, userId: null,
-          backerName: BACKER_NAMES[Math.floor(Math.random() * BACKER_NAMES.length)],
-          kind: 'DONATION',
-          amount: amt, message: '', provider: 'MOCK', status: 'SUCCESS', createdAt: at,
-        });
-        events.push({
-          id: uuidv4(), listingId: id, listingName: s.name, eventType: 'DONATION',
-          amount: amt, recordedAt: at,
-        });
+      events.push({
+        id: uuidv4(), listingId: id, listingName: s.name, eventType: 'TOOK_RANK',
+        backerName: s.name, amount: selfPaid, recordedAt: new Date(now.getTime() - Math.floor(Math.random() * 8 * 3600 * 1000)),
       });
       if (s.raised > 1000) {
         promotions.push({
@@ -353,6 +662,20 @@ async function seedIfNeeded(db) {
         });
       }
     }
+    // give the global #1 a defend window that looks live
+    if (listings[0]) {
+      listings[0].trendingUntil = new Date(now.getTime() + (18 * 3600 + 42 * 60) * 1000);
+      listings[0].numberOneSince = new Date(now.getTime() - 4 * 3600 * 1000);
+    }
+    await db.collection('hall_of_fame').insertOne({
+      id: uuidv4(),
+      periodStart: new Date(now.getTime() - 2 * COMPETITION_PERIOD_MS),
+      periodEnd: new Date(now.getTime() - COMPETITION_PERIOD_MS),
+      winners: listings.slice(0, 3).map((l, i) => ({
+        rank: i + 1, listingId: l.id, name: l.name, handle: l.handle, logo: l.logo, amount: l.totalRaised, views: l.views,
+      })),
+      createdAt: new Date(now.getTime() - COMPETITION_PERIOD_MS),
+    });
     if (listings.length) await db.collection('listings').insertMany(listings);
     if (contributions.length) await db.collection('contributions').insertMany(contributions);
     if (promotions.length) await db.collection('promotions').insertMany(promotions);
@@ -415,7 +738,7 @@ async function fulfilStripeSession(db, sessionId) {
   const res = await applyContribution(db, {
     listing,
     amount: record.amount,
-    kind: record.kind,
+    kind: record.kind || 'SELF_PAY',
     user,
     backerName: record.backerName,
     message: record.message,
@@ -424,6 +747,7 @@ async function fulfilStripeSession(db, sessionId) {
     provider: 'STRIPE',
     providerRef: session.payment_intent || sessionId,
     paymentId: record.id,
+    targetRank: record.targetRank || 1,
   });
 
   await db.collection('payments').updateOne({ sessionId }, { $set: { newRank: res.newRank } });
@@ -445,10 +769,10 @@ async function totals(db) {
   const agg = await db.collection('contributions').aggregate([
     { $group: { _id: null, total: { $sum: '$amount' }, backers: { $sum: 1 } } },
   ]).toArray();
-  const byKind = await db.collection('contributions').aggregate([
-    { $group: { _id: '$kind', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+  const viewAgg = await db.collection('listings').aggregate([
+    { $match: { status: { $ne: 'REJECTED' } } },
+    { $group: { _id: null, views: { $sum: { $ifNull: ['$views', 0] } }, clicks: { $sum: { $ifNull: ['$clicks', 0] } }, count: { $sum: 1 } } },
   ]).toArray();
-  const kindMap = Object.fromEntries(byKind.map(k => [k._id || 'DONATION', k]));
   const boostAgg = await db.collection('promotions').aggregate([
     { $group: { _id: null, total: { $sum: '$amount' } } },
   ]).toArray();
@@ -456,16 +780,24 @@ async function totals(db) {
     { $group: { _id: null, total: { $sum: '$amount' } } },
   ]).toArray();
   const totalRaised = agg[0]?.total || 0;
+  const now = new Date();
+  const liveBattles = await db.collection('listings').countDocuments({
+    status: { $ne: 'REJECTED' },
+    trendingUntil: { $gt: now },
+  });
   return {
     totalRaised,
     totalBackers: agg[0]?.backers || 0,
-    selfPaidTotal: kindMap.SELF_PAY?.total || 0,
-    donatedTotal: kindMap.DONATION?.total || 0,
-    donationCount: kindMap.DONATION?.count || 0,
+    totalViews: viewAgg[0]?.views || 0,
+    totalClicks: viewAgg[0]?.clicks || 0,
+    liveBattles,
+    selfPaidTotal: totalRaised,
+    donatedTotal: 0,
+    donationCount: 0,
     totalBoosts: boostAgg[0]?.total || 0,
-    creatorPool: creatorShare(totalRaised),
-    charityPool: charityShare(totalRaised),
-    platformPool: platformShare(totalRaised),
+    creatorPool: 0,
+    charityPool: 0,
+    platformPool: totalRaised,
     split: SPLIT,
     paidOut: paidAgg[0]?.total || 0,
   };
@@ -482,6 +814,7 @@ async function handler(request, context) {
 
   try {
     await seedIfNeeded(db);
+    await ensureBattle(db);
 
     if (path === '/health' && method === 'GET') return json({ ok: true, ts: Date.now() });
 
@@ -589,36 +922,58 @@ async function handler(request, context) {
       const now = new Date();
       const totalListings = await db.collection('listings').countDocuments({ status: { $ne: 'REJECTED' } });
       const activePromos = await db.collection('promotions').countDocuments({ endAt: { $gt: now } });
+      const battle = await ensureBattle(db);
       return json({
         ...t,
         totalListings,
+        activeProfiles: totalListings,
         activePromos,
-        creatorSharePct: CREATOR_SHARE * 100,
-        charitySharePct: CHARITY_SHARE * 100,
-        platformSharePct: PLATFORM_SHARE * 100,
         viewersOnline: 30 + Math.floor(Math.random() * 80),
+        listingQuota: await listingQuota(db),
+        minIncrement: MIN_INCREMENT,
+        platformFeePct: PLATFORM_FEE_PCT * 100,
+        battle: {
+          label: battle.label || '24-HOUR TRENDING BATTLE',
+          startAt: battle.startAt,
+          endAt: battle.endAt,
+          periodMs: battle.periodMs || COMPETITION_PERIOD_MS,
+        },
       });
     }
 
+    if (path === '/listings/quota' && method === 'GET') {
+      return json(await listingQuota(db));
+    }
+
     if (path === '/rankings' && method === 'GET') {
-      const category = url.searchParams.get('category');
-      const type = url.searchParams.get('type');
+      const category = url.searchParams.get('category') || 'all';
       const limit = parseInt(url.searchParams.get('limit') || '50');
-      const q = { status: { $ne: 'REJECTED' } };
-      if (category && category !== 'all') q.category = category;
-      if (type && type !== 'all') q.type = type;
-      const listings = await db.collection('listings').find(q, { projection: { _id: 0 } }).toArray();
-      const enriched = await enrichListings(db, listings);
-      enriched.sort((a, b) => (b.score - a.score) || (new Date(b.createdAt) - new Date(a.createdAt)));
-      return json({ rankings: enriched.slice(0, limit).map((l, i) => ({ ...l, rank: i + 1 })) });
+      const ranked = await rankedCategory(db, category);
+      const battle = await ensureBattle(db);
+      return json({
+        rankings: ranked.slice(0, limit),
+        minIncrement: MIN_INCREMENT,
+        battle: { label: battle.label, startAt: battle.startAt, endAt: battle.endAt },
+      });
+    }
+
+    if (path === '/challenge/quote' && method === 'GET') {
+      const category = url.searchParams.get('category') || 'instagram';
+      const listingId = url.searchParams.get('listingId') || null;
+      const targetRank = parseInt(url.searchParams.get('targetRank') || '1');
+      const quote = await quoteChallenge(db, { category, listingId, targetRank });
+      return json(quote);
+    }
+
+    if (path === '/hall-of-fame' && method === 'GET') {
+      const items = await db.collection('hall_of_fame')
+        .find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(12).toArray();
+      return json({ hall: items });
     }
 
     if (path === '/trending/instagram' && method === 'GET') {
-      const listings = await db.collection('listings')
-        .find({ category: 'instagram', status: { $ne: 'REJECTED' } }, { projection: { _id: 0 } }).toArray();
-      const enriched = await enrichListings(db, listings);
-      enriched.sort((a, b) => b.score - a.score);
-      return json({ trending: enriched.slice(0, 6).map((l, i) => ({ ...l, rank: i + 1 })) });
+      const ranked = await rankedCategory(db, 'instagram');
+      return json({ trending: ranked.slice(0, 6) });
     }
 
     // Public transparency: where the money goes
@@ -653,6 +1008,21 @@ async function handler(request, context) {
       const backers = await db.collection('contributions')
         .find({ listingId }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(20).toArray();
       return json({ backers });
+    }
+
+    if (path.startsWith('/listings/') && pathArr.length === 3 && (pathArr[2] === 'click' || pathArr[2] === 'view') && method === 'POST') {
+      const listingId = pathArr[1];
+      const field = pathArr[2] === 'click' ? 'clicks' : 'views';
+      const listing = await db.collection('listings').findOne({ id: listingId });
+      if (!listing) return json({ error: 'listing not found' }, 404);
+      await db.collection('listings').updateOne({ id: listingId }, { $inc: { [field]: 1 } });
+      if (pathArr[2] === 'click') {
+        await db.collection('rank_events').insertOne({
+          id: uuidv4(), listingId, listingName: listing.name,
+          eventType: 'SOCIAL_CLICK', amount: 0, recordedAt: new Date(),
+        });
+      }
+      return json({ ok: true, id: listingId, [field]: (listing[field] || 0) + 1 });
     }
 
     if (path.startsWith('/listings/') && pathArr.length === 2 && method === 'GET') {
@@ -716,36 +1086,71 @@ async function handler(request, context) {
     if (path === '/listings' && method === 'POST') {
       const body = await request.json();
       const user = await currentUser(db, request);
-      const { type = 'PRODUCT', name, tagline, description, logo, website, category, socials, contactEmail, image, network, handle } = body;
+      if (!user) return json({ error: 'Log in to start trending.' }, 401);
+      const { type = 'PROFILE', name, tagline, description, logo, website, category, socials, contactEmail, image, network, handle, displayName, listFree } = body;
       if (!name || !category) return json({ error: 'name and category required' }, 400);
+      const existing = await db.collection('listings').findOne({ ownerId: user.id, category, status: { $ne: 'REJECTED' } });
+      if (existing) {
+        const ranked = await rankedCategory(db, category);
+        const mine = ranked.find(l => l.id === existing.id) || { ...existing, rank: null };
+        const quote = await quoteChallenge(db, { category, listingId: existing.id, targetRank: 1 });
+        return json({ listing: mine, existing: true, quote, quota: await listingQuota(db) });
+      }
+      const quota = await listingQuota(db);
+      if (listFree !== false && !quota.freeOpen) {
+        return json({
+          error: 'Free listing slots are full. Pay to enter the battle.',
+          code: 'FREE_SLOTS_FULL',
+          quota,
+        }, 402);
+      }
+      const cleanHandle = String(handle || name || '').replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/.*$/, '');
       const listing = {
         id: uuidv4(), type, name, slug: slugify(name),
+        displayName: displayName || name,
         tagline: tagline || '', description: description || tagline || '',
-        logo: logo || '🚀', website: website || '',
+        logo: logo || '🔥', website: website || (cleanHandle ? `https://instagram.com/${cleanHandle}` : ''),
         image: image || '',
-        network: network || '',
-        handle: handle || '',
+        network: network || 'instagram',
+        handle: cleanHandle,
         imageVerified: false,
-        contactEmail: contactEmail || user?.email || '',
+        contactEmail: contactEmail || user.email || '',
         category, socials: socials || {},
-        status: 'APPROVED', verified: false, foundingBadge: false,
-        ownerId: user?.id || null,
+        status: 'APPROVED', verified: false, foundingBadge: quota.freeOpen,
+        ownerId: user.id,
         totalRaised: 0, backers: 0, connects: 0,
+        views: 0, clicks: 0, timesOvertaken: 0, highestRank: null, numberOneMs: 0,
         createdAt: new Date(),
       };
       await db.collection('listings').insertOne(listing);
-      return json({ listing: { ...listing, raised: 0, score: 0, creatorShare: 0 } });
+      await db.collection('rank_events').insertOne({
+        id: uuidv4(), listingId: listing.id, listingName: listing.name,
+        eventType: 'ENTERED', amount: 0, backerName: listing.name, recordedAt: new Date(),
+      });
+      const snap = await rankSnapshot(db, listing);
+      const quote = await quoteChallenge(db, { category, listingId: listing.id, targetRank: 1 });
+      return json({
+        listing: {
+          ...listing,
+          raised: 0,
+          score: 0,
+          newRank: snap.rank,
+          ...snap,
+        },
+        quote,
+        quota: await listingQuota(db),
+      });
     }
 
-    /* ---------- invest: SELF_PAY (owner pays to rank) or DONATION (fans push you up) ---------- */
-    // Kept for MOCK mode / backward compatibility. Real money goes through /payments/checkout.
+    /* ---------- pay to take / defend a rank (MOCK fallback) ---------- */
     if (path === '/support' && method === 'POST') {
       const body = await request.json();
       const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Log in to compete for a rank.' }, 401);
       const listingId = body.listingId;
       const localAmount = Math.floor(Number(body.amount));
       const cur = currencyOf(body.currency || BASE_CURRENCY);
-      const kind = body.kind === 'SELF_PAY' ? 'SELF_PAY' : 'DONATION';
+      const targetRank = Math.max(1, Math.min(5, Number(body.targetRank) || 1));
       if (!listingId) return json({ error: 'listingId required' }, 400);
       if (!Number.isFinite(localAmount) || localAmount < 1) {
         return json({ error: `Minimum amount is ${cur.symbol}1` }, 400);
@@ -753,31 +1158,38 @@ async function handler(request, context) {
       const amount = cur.code === BASE_CURRENCY ? localAmount : toBase(localAmount, cur.code);
       const listing = await db.collection('listings').findOne({ id: listingId });
       if (!listing) return json({ error: 'listing not found' }, 404);
+      if (listing.ownerId !== user.id) {
+        return json({ error: 'You can only pay to trend your own profile.' }, 403);
+      }
+      const quote = await quoteChallenge(db, { category: listing.category, listingId: listing.id, targetRank });
+      if (amount < quote.minBid) {
+        return json({
+          error: `Too late — #${targetRank} now costs more. Minimum is ₹${quote.minBid}.`,
+          code: 'AMOUNT_STALE',
+          quote,
+        }, 409);
+      }
 
       const payment = {
-        id: uuidv4(), listingId, userId: user?.id || null, provider: 'MOCK',
+        id: uuidv4(), listingId, userId: user.id, provider: 'MOCK',
         amount, currency: BASE_CURRENCY,
         localAmount, localCurrency: cur.code,
-        status: 'SUCCESS', kind, createdAt: new Date(),
+        fee: platformFeeOn(amount),
+        status: 'SUCCESS', kind: 'SELF_PAY', targetRank, createdAt: new Date(),
       };
       await db.collection('payments').insertOne(payment);
 
       const res = await applyContribution(db, {
-        listing, amount, kind, user,
-        backerName: body.backerName, message: body.message, anonymous: body.anonymous,
-        plan: body.plan, provider: 'MOCK', paymentId: payment.id,
+        listing, amount, kind: 'SELF_PAY', user,
+        backerName: body.backerName || user.name, plan: body.plan,
+        provider: 'MOCK', paymentId: payment.id, targetRank,
       });
 
       return json({
-        ok: true, mode: 'MOCK', ...res, category: listing.category, kind, payment,
+        ok: true, mode: 'MOCK', ...res, category: listing.category, kind: 'SELF_PAY', payment,
         localAmount, localCurrency: cur.code, baseAmount: amount,
-        split: {
-          ...SPLIT,
-          creatorAmount: creatorShare(amount),
-          charityAmount: charityShare(amount),
-          platformAmount: platformShare(amount),
-        },
-        creatorSharePct: CREATOR_SHARE * 100,
+        platformFee: platformFeeOn(amount),
+        totalCharge: amount + platformFeeOn(amount),
       });
     }
 
@@ -786,15 +1198,17 @@ async function handler(request, context) {
       return json({
         provider: stripeEnabled ? 'stripe' : 'mock', mode: stripeMode,
         cardMinAmount: STRIPE_MIN_INR, base: BASE_CURRENCY, live: false, sandbox: true,
+        platformFeePct: PLATFORM_FEE_PCT * 100, minIncrement: MIN_INCREMENT,
       });
     }
 
     if (path === '/payments/checkout' && method === 'POST') {
       const body = await request.json();
       const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Log in to compete for a rank.' }, 401);
       const localAmount = Math.floor(Number(body.amount));
       const cur = currencyOf(body.currency || BASE_CURRENCY);
-      const kind = body.kind === 'SELF_PAY' ? 'SELF_PAY' : 'DONATION';
+      const targetRank = Math.max(1, Math.min(5, Number(body.targetRank) || 1));
       if (!body.listingId) return json({ error: 'listingId required' }, 400);
       if (!Number.isFinite(localAmount) || localAmount < 1) {
         return json({ error: `Minimum amount is ${cur.symbol}1` }, 400);
@@ -802,8 +1216,22 @@ async function handler(request, context) {
       const amount = cur.code === BASE_CURRENCY ? localAmount : toBase(localAmount, cur.code);
       const listing = await db.collection('listings').findOne({ id: body.listingId });
       if (!listing) return json({ error: 'listing not found' }, 404);
+      if (listing.ownerId !== user.id) {
+        return json({ error: 'You can only pay to trend your own profile.' }, 403);
+      }
+      const quote = await quoteChallenge(db, { category: listing.category, listingId: listing.id, targetRank });
+      if (amount < quote.minBid) {
+        return json({
+          error: `Too late — #${targetRank} now costs more. Minimum is ₹${quote.minBid}.`,
+          code: 'AMOUNT_STALE',
+          quote,
+        }, 409);
+      }
       if (!stripeEnabled) return json({ error: 'STRIPE_UNAVAILABLE', mode: 'MOCK' }, 503);
-      if (localAmount < cur.cardMin) {
+
+      const feeLocal = Math.round(localAmount * PLATFORM_FEE_PCT);
+      const chargeLocal = localAmount + feeLocal;
+      if (chargeLocal < cur.cardMin) {
         return json({
           error: `Card payments start at ${cur.symbol}${cur.cardMin} (Stripe's minimum). Smaller amounts are recorded in demo mode.`,
           code: 'BELOW_CARD_MIN', minAmount: cur.cardMin, currency: cur.code, mode: 'MOCK',
@@ -814,16 +1242,14 @@ async function handler(request, context) {
       const paymentId = uuidv4();
       try {
         const { session, currency, unit } = await createCheckoutSession({
-          amount: localAmount,
+          amount: chargeLocal,
           currency: cur.code.toLowerCase(),
-          minorUnits: toMinorUnits(localAmount, cur.code),
-          name: kind === 'SELF_PAY' ? `Pay to rank — ${listing.name}` : `Donation to ${listing.name}`,
-          description: kind === 'SELF_PAY'
-            ? 'Climb the Donate & Colab leaderboard'
-            : 'Push this listing up the Donate & Colab leaderboard',
+          minorUnits: toMinorUnits(chargeLocal, cur.code),
+          name: `Take #${targetRank} — ${listing.name}`,
+          description: `PayToTrend visibility: compete for #${targetRank} on the public leaderboard`,
           metadata: {
-            paymentId, listingId: listing.id, kind, amount: String(amount),
-            userId: user?.id || '', plan: body.plan || '',
+            paymentId, listingId: listing.id, kind: 'SELF_PAY', amount: String(amount),
+            userId: user.id, plan: body.plan || '', targetRank: String(targetRank),
           },
           successUrl: `${origin}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: `${origin}/pay/cancel`,
@@ -833,19 +1259,22 @@ async function handler(request, context) {
           id: paymentId,
           listingId: listing.id,
           listingName: listing.name,
-          userId: user?.id || null,
+          userId: user.id,
           provider: 'STRIPE',
           sessionId: session.id,
           amount,
+          fee: toBase(feeLocal, cur.code),
           localAmount,
           localCurrency: cur.code,
+          chargeLocal,
           amountMinor: unit,
           currency: currency.toUpperCase(),
-          kind,
+          kind: 'SELF_PAY',
+          targetRank,
           plan: body.plan || '',
           message: String(body.message || '').slice(0, 200),
-          anonymous: !!body.anonymous,
-          backerName: body.backerName || user?.name || '',
+          anonymous: false,
+          backerName: body.backerName || user.name || '',
           status: 'PENDING',
           creditedAt: null,
           createdAt: new Date(),
@@ -894,29 +1323,19 @@ async function handler(request, context) {
     /* ---------- what does it cost to grab #1 / the next rank ---------- */
     if (path === '/rank-target' && method === 'GET') {
       const listingId = url.searchParams.get('listingId');
+      const targetRank = parseInt(url.searchParams.get('targetRank') || '1');
       if (!listingId) return json({ error: 'listingId required' }, 400);
       const listing = await db.collection('listings').findOne({ id: listingId });
       if (!listing) return json({ error: 'listing not found' }, 404);
-      const sameCat = await db.collection('listings')
-        .find({ category: listing.category, status: { $ne: 'REJECTED' } }).toArray();
-      const enriched = await enrichListings(db, sameCat);
-      enriched.sort((a, b) => b.score - a.score);
-      const idx = enriched.findIndex(l => l.id === listingId);
-      const me = enriched[idx];
-      const top = enriched[0];
-      const above = idx > 0 ? enriched[idx - 1] : null;
-      const toBeatTop = idx === 0 ? 0 : Math.max(1, top.score - me.score + 1);
-      const toBeatAbove = above ? Math.max(1, above.score - me.score + 1) : 0;
+      const quote = await quoteChallenge(db, { category: listing.category, listingId, targetRank });
+      const snap = await rankSnapshot(db, listing);
       return json({
         listingId, category: listing.category,
-        currentRank: idx + 1,
-        myScore: me.score,
-        topName: top?.name || '',
-        topScore: top?.score || 0,
-        aboveName: above?.name || '',
-        toBeatTop,
-        toBeatAbove,
-        isTop: idx === 0,
+        currentRank: snap.rank,
+        ...snap,
+        ...quote,
+        toBeatTop: quote.minBid,
+        isTop: snap.isTop,
       });
     }
 
@@ -978,8 +1397,36 @@ async function handler(request, context) {
       const user = await currentUser(db, request);
       if (!user) return json({ error: 'Unauthorized' }, 401);
       const listings = await db.collection('listings').find({ ownerId: user.id }, { projection: { _id: 0 } }).toArray();
-      const enriched = await enrichListings(db, listings);
-      return json({ listings: enriched, creatorSharePct: CREATOR_SHARE * 100 });
+      const enriched = await attachRanks(db, await enrichListings(db, listings));
+      const withStats = enriched.map(l => {
+        const views = l.views || 0;
+        const clicks = l.clicks || 0;
+        const holdMs = (l.numberOneMs || 0) + (l.numberOneSince ? Math.max(0, Date.now() - new Date(l.numberOneSince).getTime()) : 0);
+        return {
+          ...l,
+          clickRate: views > 0 ? Math.round((clicks / views) * 1000) / 10 : 0,
+          timeAtNumberOneMs: holdMs,
+        };
+      });
+      return json({ listings: withStats });
+    }
+
+    if (path === '/me/notifications' && method === 'GET') {
+      const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+      const items = await db.collection('notifications')
+        .find({ userId: user.id }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(20).toArray();
+      return json({ notifications: items, unread: items.filter(n => !n.read).length });
+    }
+
+    if (path === '/me/notifications/read' && method === 'POST') {
+      const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+      const body = await request.json().catch(() => ({}));
+      const q = { userId: user.id, read: false };
+      if (body.id) q.id = body.id;
+      await db.collection('notifications').updateMany(q, { $set: { read: true } });
+      return json({ ok: true });
     }
 
     if (path === '/me/investments' && method === 'GET') {
@@ -1135,7 +1582,7 @@ async function handler(request, context) {
     return json({ error: 'Not found', path }, 404);
   } catch (err) {
     console.error('API error:', err);
-    return json({ error: err.message }, 500);
+    return json({ error: err.message, code: err.code }, err.status || 500);
   }
 }
 

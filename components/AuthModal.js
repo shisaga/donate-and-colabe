@@ -84,7 +84,7 @@ export default function AuthModal({ open, onClose, onAuthed, reason }) {
           </button>
         </form>
         <p className="text-xs font-semibold opacity-70">
-          {mode === 'login' ? "New here? Tap Register — it takes 10 seconds." : 'By registering you agree that listings are ranked by funds gathered and marked SPONSORED.'}
+          {mode === 'login' ? "New here? Tap Register — it takes 10 seconds." : 'By registering you agree that profiles are ranked by paid position on PayToTrend. We sell visibility here, not followers.'}
         </p>
       </div>
     </Modal>

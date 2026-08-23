@@ -2,8 +2,8 @@ import './globals.css';
 import { Toaster } from 'sonner';
 
 export const metadata = {
-  title: 'Donate & Colab — List. Pay for #1. Get donations.',
-  description: 'List your Instagram ID, app or startup. Pay to rank #1 or let fans donate from ₹1. 30% back to creators, 40% to people in need.',
+  title: 'Pay To Trend — Compete. Climb. Get Discovered.',
+  description: 'PayToTrend is a competitive paid-discovery platform. List your social profile, fight for #1 on the public leaderboard, and get discovered. We sell visibility on PayToTrend — not followers or likes.',
 };
 
 export const viewport = {

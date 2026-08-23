@@ -1,13 +1,21 @@
 'use client';
 import { X } from 'lucide-react';
 
+export function TalkCloud({ children, color = '#4DD4E6', rotate = -3 }) {
+  return (
+    <div className="talk-cloud wobble" style={{ background: color, transform: `rotate(${rotate}deg)` }}>
+      {children}
+    </div>
+  );
+}
+
 export function Sticker({ children, color = '#FFE156', rotate = -4 }) {
   return (
     <span className="sticker" style={{ background: color, transform: `rotate(${rotate}deg)` }}>{children}</span>
   );
 }
 
-export function Modal({ open, onClose, children, wide, title = '💥 Donate & Colab' }) {
+export function Modal({ open, onClose, children, wide, title = '🔥 Pay To Trend' }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-start md:items-center justify-center p-2 sm:p-4 overflow-y-auto" onClick={onClose}>
