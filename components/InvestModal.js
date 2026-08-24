@@ -145,7 +145,7 @@ export default function InvestModal({ open, onClose, listing, onDone, user, mode
       if (e.status === 409) {
         api(`/challenge/quote?category=${listing.category}&listingId=${listing.id}&targetRank=${rank}`)
           .then(t => { setQuote(t); setAmount(String(Math.max(1, fromBase(t.minBid)))); })
-          .catch(() => {});
+          .catch(() => { });
       }
     } finally { setLoading(false); }
   };
@@ -215,9 +215,9 @@ export default function InvestModal({ open, onClose, listing, onDone, user, mode
             : `Pay ${local(amt || 0)} to move your profile higher. Rank is always live — pay more anytime to take #1. This buys visibility on PayToTrend, not Instagram followers, likes, or engagement.`}
         </p>
 
-        <div className="brut p-2 bg-[#4DD4E6] font-bold text-xs text-center">
+        {/* <div className="brut p-2 bg-[#4DD4E6] font-bold text-xs text-center">
           🔒 Secure Razorpay checkout — test cards work with this key
-        </div>
+        </div> */}
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="brut-btn px-4 py-2 is-light bg-white">Cancel</button>
