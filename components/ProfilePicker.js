@@ -70,34 +70,40 @@ export default function ProfilePicker({ form, setForm }) {
     reader.readAsDataURL(file);
   };
 
+  const isSocial = !['startup', 'product'].includes(network);
+
   return (
     <div className="brut p-4 bg-white space-y-3">
       <div className="flex items-center gap-2 text-xs font-bold uppercase">
-        <ImageIcon size={14} strokeWidth={3} /> Import your profile picture
+        <ImageIcon size={14} strokeWidth={3} /> {isSocial ? 'Import your profile picture' : 'Add a logo or picture'}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {NETWORKS.map(n => (
-          <button key={n.id} type="button" disabled={!n.enabled} onClick={() => n.enabled && setForm(f => ({ ...f, network: n.id }))}
-            className={`brut-btn px-3 py-2 text-xs ${!n.enabled ? 'opacity-40 cursor-not-allowed' : network === n.id ? 'is-active bg-black text-[#FFE156]' : 'is-light bg-white'}`}>
-            {n.label}{!n.enabled ? ' (soon)' : ''}
-          </button>
-        ))}
-      </div>
+      {isSocial && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {NETWORKS.map(n => (
+              <button key={n.id} type="button" disabled={!n.enabled} onClick={() => n.enabled && setForm(f => ({ ...f, network: n.id }))}
+                className={`brut-btn px-3 py-2 text-xs ${!n.enabled ? 'opacity-40 cursor-not-allowed' : network === n.id ? 'is-active bg-black text-[#FFE156]' : 'is-light bg-white'}`}>
+                {n.label}{!n.enabled ? ' (soon)' : ''}
+              </button>
+            ))}
+          </div>
 
-      <div className="flex flex-wrap gap-2">
-        <input value={handle} onChange={e => setHandle(e.target.value)}
-          placeholder={`@your_${network}_handle`} className="brut p-3 outline-none flex-1 w-full sm:w-auto min-w-0" />
-        <button type="button" onClick={importPic} disabled={busy}
-          className="brut-btn px-4 py-3 is-lime bg-[#A0F04D] text-sm inline-flex items-center gap-1">
-          <Download size={14} strokeWidth={3} /> {busy ? 'Fetching...' : 'Import picture'}
-        </button>
-      </div>
+          <div className="flex flex-wrap gap-2">
+            <input value={handle} onChange={e => setHandle(e.target.value)}
+              placeholder={`@your_${network}_handle`} className="brut p-3 outline-none flex-1 w-full sm:w-auto min-w-0" />
+            <button type="button" onClick={importPic} disabled={busy}
+              className="brut-btn px-4 py-3 is-lime bg-[#A0F04D] text-sm inline-flex items-center gap-1">
+              <Download size={14} strokeWidth={3} /> {busy ? 'Fetching...' : 'Import picture'}
+            </button>
+          </div>
 
-      {hint && (
-        <div className="brut p-3 bg-[#FFE156] text-xs font-bold">
-          {hint}
-        </div>
+          {hint && (
+            <div className="brut p-3 bg-[#FFE156] text-xs font-bold">
+              {hint}
+            </div>
+          )}
+        </>
       )}
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">

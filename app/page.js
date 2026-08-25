@@ -9,12 +9,21 @@ import { Modal, Sticker, StatBox, TalkCloud } from '@/components/brut';
 import AuthModal from '@/components/AuthModal';
 import InvestModal from '@/components/InvestModal';
 import ProfilePicker from '@/components/ProfilePicker';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { api, compact, useAuth } from '@/lib/client';
 import { useMoney } from '@/lib/currency';
 
 const COLORS = ['#FFE156', '#FF5DA2', '#4DD4E6', '#FF5C4D', '#A0F04D', '#B285FF', '#FFB84D'];
 const PLATFORMS = [
   { id: 'instagram', label: '📸 Instagram', enabled: true },
+  { id: 'startup', label: '🚀 Startup', enabled: true },
+  { id: 'product', label: '🛍 Product', enabled: true },
   { id: 'x', label: '𝕏 X', enabled: false },
   { id: 'youtube', label: '▶️ YouTube', enabled: false },
   { id: 'linkedin', label: '💼 LinkedIn', enabled: false },
@@ -58,24 +67,68 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
         </a>
         <div className="flex items-center gap-2">
           <CurrencySwitcher />
-          <a href="#leaderboard" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">📸 Instagram</a>
-          <a href="#leaderboard" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">🔥 Trending</a>
-          <a href="#leaderboard" className="hidden md:inline-block brut-btn px-3 py-2 bg-white text-sm">🏆 Rankings</a>
-          <a href="#how" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">❓ How It Works</a>
-          {user ? (
+          {!user && (
             <>
-              <a href="/dashboard" className="brut-btn px-3 py-2 bg-white text-sm inline-flex items-center gap-1">
-                <LayoutDashboard size={14} strokeWidth={3} /> <span className="hidden sm:inline">My Stats</span>
-              </a>
-              {user.role === 'admin' && (
-                <a href="/admin" className="brut-btn px-3 py-2 bg-black text-[#FFE156] text-sm inline-flex items-center gap-1">
-                  <Shield size={14} strokeWidth={3} /> Admin
-                </a>
-              )}
-              <button onClick={onLogout} className="brut-btn px-3 py-2 bg-white text-sm inline-flex items-center gap-1">
-                <LogOut size={14} strokeWidth={3} />
-              </button>
+              <a href="#leaderboard" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">📸 Instagram</a>
+              <a href="#leaderboard" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">🔥 Trending</a>
+              <a href="#leaderboard" className="hidden md:inline-block brut-btn px-3 py-2 bg-white text-sm">🏆 Rankings</a>
+              <a href="#how" className="hidden lg:inline-block brut-btn px-3 py-2 bg-white text-sm">❓ How It Works</a>
             </>
+          )}
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="brut-btn px-2 py-1 bg-white text-sm inline-flex items-center gap-2 outline-none">
+                  {user.image ? (
+                    <img src={user.image} alt={user.name || 'User'} className="w-6 h-6 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-[#FFE156] border border-black flex items-center justify-center font-bold">
+                      {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="font-bold hidden sm:inline truncate max-w-[100px]">{user.name || user.email}</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 brut bg-white p-2 text-sm font-bold border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)]">
+                <DropdownMenuItem asChild className="cursor-pointer outline-none">
+                  <a href="#leaderboard" className="flex items-center gap-2 p-2 w-full hover:bg-[#FFE156]">
+                    📸 Instagram
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer outline-none">
+                  <a href="#leaderboard" className="flex items-center gap-2 p-2 w-full hover:bg-[#FFE156]">
+                    🔥 Trending
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer outline-none">
+                  <a href="#leaderboard" className="flex items-center gap-2 p-2 w-full hover:bg-[#FFE156]">
+                    🏆 Rankings
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer outline-none">
+                  <a href="#how" className="flex items-center gap-2 p-2 w-full hover:bg-[#FFE156]">
+                    ❓ How It Works
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="my-1 border-t-2 border-black" />
+                <DropdownMenuItem asChild className="cursor-pointer outline-none">
+                  <a href="/dashboard" className="flex items-center gap-2 p-2 w-full hover:bg-[#FFE156]">
+                    <LayoutDashboard size={14} strokeWidth={3} /> My Stats
+                  </a>
+                </DropdownMenuItem>
+                {user.role === 'admin' && (
+                  <DropdownMenuItem asChild className="cursor-pointer outline-none">
+                    <a href="/admin" className="flex items-center gap-2 p-2 w-full hover:bg-black hover:text-[#FFE156]">
+                      <Shield size={14} strokeWidth={3} /> Admin
+                    </a>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator className="my-1 border-t-2 border-black" />
+                <DropdownMenuItem onClick={onLogout} className="cursor-pointer outline-none flex items-center gap-2 p-2 w-full text-red-600 hover:bg-red-100">
+                  <LogOut size={14} strokeWidth={3} /> Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <button onClick={onLogin} className="brut-btn px-4 py-2 bg-white text-sm font-bold">Log in</button>
           )}
@@ -430,7 +483,13 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
           <div className="grid grid-cols-2 gap-3">
             {PLATFORMS.map(p => (
               <button key={p.id} disabled={!p.enabled}
-                onClick={() => { setForm(f => ({ ...f, network: p.id })); setStep(2); }}
+                onClick={() => { 
+                  let defaultCat = 'instagram';
+                  if (p.id === 'startup') defaultCat = 'startups';
+                  if (p.id === 'product') defaultCat = 'products';
+                  setForm(f => ({ ...f, network: p.id, category: defaultCat })); 
+                  setStep(2); 
+                }}
                 className={`brut-btn py-4 text-lg ${p.enabled ? 'bg-[#FFE156]' : 'bg-white opacity-50 cursor-not-allowed'}`}>
                 {p.label}{!p.enabled && <div className="text-[10px] font-bold">COMING SOON</div>}
               </button>
@@ -447,16 +506,16 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
               const h = v.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/\/.*$/, '');
               setForm(f => ({ ...f, website: v, handle: h, name: f.name || (h ? '@' + h : '') }));
             }}
-            placeholder="https://instagram.com/username"
+            placeholder={form.network === 'instagram' ? "https://instagram.com/username" : "Website URL"}
             className="brut w-full p-3 outline-none"
           />
           <ProfilePicker form={form} setForm={setForm} />
-          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="@username" className="brut w-full p-3 outline-none" />
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={form.network === 'startup' ? "Startup Name" : form.network === 'product' ? "Product Name" : "@username"} className="brut w-full p-3 outline-none" />
           <input value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="Display name" className="brut w-full p-3 outline-none" />
           <input value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} placeholder="One-line bio (max 80 chars)" maxLength={80} className="brut w-full p-3 outline-none" />
           <div className="flex justify-between">
             <button onClick={() => setStep(1)} className="brut-btn px-4 py-2 bg-white">← Back</button>
-            <button onClick={() => { if (!form.name.trim()) return toast.error('Username required'); setStep(3); }} className="brut-btn px-6 py-3 bg-[#FFE156]">Continue →</button>
+            <button onClick={() => { if (!form.name.trim()) return toast.error('Name required'); setStep(3); }} className="brut-btn px-6 py-3 bg-[#FFE156]">Continue →</button>
           </div>
         </div>
       ) : step === 3 ? (

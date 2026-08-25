@@ -149,6 +149,7 @@ function publicOrigin(request) {
     const proto = (request.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
     return `${proto}://${headerHost}`.replace(/\/$/, '');
   }
+  console.log('publicOrigin', process.env.NEXT_PUBLIC_BASE_URL, url.origin);
   return (process.env.NEXT_PUBLIC_BASE_URL || url.origin).replace(/\/$/, '');
 }
 
@@ -197,35 +198,6 @@ const CATEGORIES = [
   { id: 'artists',    name: 'Artists',    slug: 'artists',    emoji: '🎵', color: '#FF5DA2' },
   { id: 'startups',   name: 'Startups',   slug: 'startups',   emoji: '🚀', color: '#FF5C4D' },
   { id: 'products',   name: 'Products',   slug: 'products',   emoji: '🛍', color: '#FFB84D' },
-];
-
-const SEED_LISTINGS = [
-  { name: '@reelqueen.ananya', displayName: 'Ananya Rao', tagline: 'Daily reels • fashion & beauty', category: 'instagram', logo: '👑', website: 'https://instagram.com/reelqueen.ananya', handle: 'reelqueen.ananya', network: 'instagram', raised: 5200, views: 12430, clicks: 1240, type: 'PROFILE' },
-  { name: '@streetfoodwala',   displayName: 'Rahul Khana', tagline: 'Street food raids across India', category: 'instagram', logo: '🍜', website: 'https://instagram.com/streetfoodwala', handle: 'streetfoodwala', network: 'instagram', raised: 5000, views: 9820, clicks: 980, type: 'PROFILE' },
-  { name: '@fitwithrohan',     displayName: 'Rohan Fit', tagline: 'Home workouts • no gym needed', category: 'instagram', logo: '💪', website: 'https://instagram.com/fitwithrohan', handle: 'fitwithrohan', network: 'instagram', raised: 4100, views: 7420, clicks: 610, type: 'PROFILE' },
-  { name: '@wander.with.mira', displayName: 'Mira Sen', tagline: 'Solo travel diaries', category: 'instagram', logo: '🌍', website: 'https://instagram.com/wander.with.mira', handle: 'wander.with.mira', network: 'instagram', raised: 2240, views: 5310, clicks: 420, type: 'PROFILE' },
-  { name: '@memeboy.official', displayName: 'Meme Boy', tagline: 'Desi memes • daily drops', category: 'instagram', logo: '😂', website: 'https://instagram.com/memeboy.official', handle: 'memeboy.official', network: 'instagram', raised: 1320, views: 8900, clicks: 1100, type: 'PROFILE' },
-  { name: '@thecoffeediary',   displayName: 'The Coffee Diary', tagline: 'Cafe reviews + brewing tips', category: 'instagram', logo: '☕', website: 'https://instagram.com/thecoffeediary', handle: 'thecoffeediary', network: 'instagram', raised: 860, views: 2100, clicks: 180, type: 'PROFILE' },
-
-  { name: '@aria.builds',   displayName: 'Aria', tagline: 'Building in public', category: 'creators', logo: '🌟', website: 'https://instagram.com/aria.builds', handle: 'aria.builds', network: 'instagram', raised: 1850, views: 4200, clicks: 310, type: 'PROFILE' },
-  { name: '@makerkev',      displayName: 'Maker Kev', tagline: 'Indie hacker • product clips', category: 'creators', logo: '😎', website: 'https://instagram.com/makerkev', handle: 'makerkev', network: 'instagram', raised: 900, views: 1800, clicks: 140, type: 'PROFILE' },
-  { name: '@zoe.codes',     displayName: 'Zoe', tagline: 'Shipping fast • creator tools', category: 'creators', logo: '👩‍💻', website: 'https://instagram.com/zoe.codes', handle: 'zoe.codes', network: 'instagram', raised: 250, views: 960, clicks: 70, type: 'PROFILE' },
-
-  { name: 'InvoiceZap',  displayName: 'InvoiceZap', tagline: 'Send invoices in 10 seconds', category: 'businesses', logo: '💸', website: 'https://instagram.com/invoicezap', handle: 'invoicezap', network: 'instagram', raised: 3400, views: 6100, clicks: 520 },
-  { name: 'DeskFlow',    displayName: 'DeskFlow', tagline: 'Support inbox, rebuilt', category: 'businesses', logo: '📬', website: 'https://instagram.com/deskflow', handle: 'deskflow', network: 'instagram', raised: 1999, views: 2800, clicks: 210 },
-  { name: 'CRMly',       displayName: 'CRMly', tagline: 'CRM founders actually use', category: 'businesses', logo: '📊', website: 'https://instagram.com/crmly', handle: 'crmly', network: 'instagram', raised: 1200, views: 1500, clicks: 90 },
-
-  { name: '@sketch.by.dev',  displayName: 'Dev Sketch', tagline: 'Pencil art timelapses', category: 'artists', logo: '✏️', website: 'https://instagram.com/sketch.by.dev', handle: 'sketch.by.dev', network: 'instagram', raised: 1780, views: 6400, clicks: 540, type: 'PROFILE' },
-  { name: '@dance.with.sia', displayName: 'Sia Dance', tagline: 'Choreography reels', category: 'artists', logo: '💃', website: 'https://instagram.com/dance.with.sia', handle: 'dance.with.sia', network: 'instagram', raised: 1410, views: 7200, clicks: 880, type: 'PROFILE' },
-  { name: '@design.daily',   displayName: 'Design Daily', tagline: 'UI teardowns every morning', category: 'artists', logo: '🎨', website: 'https://instagram.com/designdaily', handle: 'designdaily', network: 'instagram', raised: 640, views: 1900, clicks: 150, type: 'PROFILE' },
-
-  { name: 'GreenLeaf',  displayName: 'GreenLeaf', tagline: 'Climate-first billing', category: 'startups', logo: '🌱', website: 'https://instagram.com/greenleaf', handle: 'greenleaf', network: 'instagram', raised: 3100, views: 4400, clicks: 300 },
-  { name: 'RocketDocs', displayName: 'RocketDocs', tagline: 'Docs for shipping teams', category: 'startups', logo: '📚', website: 'https://instagram.com/rocketdocs', handle: 'rocketdocs', network: 'instagram', raised: 1700, views: 2200, clicks: 160 },
-  { name: 'FundedFast', displayName: 'FundedFast', tagline: 'Founders meeting angels', category: 'startups', logo: '🚀', website: 'https://instagram.com/fundedfast', handle: 'fundedfast', network: 'instagram', raised: 900, views: 1100, clicks: 80 },
-
-  { name: 'NeuroWrite',    displayName: 'NeuroWrite', tagline: 'AI copy that never sleeps', category: 'products', logo: '✍️', website: 'https://instagram.com/neurowrite', handle: 'neurowrite', network: 'instagram', raised: 2500, views: 3800, clicks: 290 },
-  { name: 'PixelForge AI', displayName: 'PixelForge', tagline: 'Product photos in seconds', category: 'products', logo: '🖼️', website: 'https://instagram.com/pixelforge', handle: 'pixelforge', network: 'instagram', raised: 1700, views: 2100, clicks: 175 },
-  { name: 'ClipGenie',     displayName: 'ClipGenie', tagline: 'Shorts from long videos', category: 'products', logo: '🎬', website: 'https://instagram.com/clipgenie', handle: 'clipgenie', network: 'instagram', raised: 199, views: 800, clicks: 40 },
 ];
 
 const BACKER_NAMES = ['Aarav', 'Priya', 'Rohit', 'Sneha', 'Kabir', 'Meera', 'Dev', 'Ishita', 'Arjun', 'Nisha', 'Vikram', 'Tara', 'Anonymous Angel', 'Zoya', 'Sam'];
@@ -681,112 +653,7 @@ async function seedIfNeeded(db) {
   if (seedPromise) return seedPromise;
   seedPromise = (async () => {
     await ensureAdmin(db);
-    const meta = await db.collection('meta').findOne({ _id: 'seed' });
-    if (meta?.version === SEED_VERSION) return { seeded: false };
-    try {
-      await db.collection('meta').insertOne({ _id: 'seed-lock-v' + SEED_VERSION, at: new Date() });
-    } catch (e) {
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 300));
-        const m = await db.collection('meta').findOne({ _id: 'seed' });
-        if (m?.version === SEED_VERSION) return { seeded: false, waited: true };
-      }
-      return { seeded: false, timeout: true };
-    }
-    for (const c of ['listings', 'promotions', 'contributions', 'rank_events', 'payments', 'payouts', 'notifications', 'hall_of_fame']) {
-      await db.collection(c).deleteMany({});
-    }
-    const now = new Date();
-    await db.collection('meta').updateOne(
-      { _id: 'battle' },
-      { $set: { periodMs: COMPETITION_PERIOD_MS, startAt: now, endAt: new Date(now.getTime() + COMPETITION_PERIOD_MS), label: '24-HOUR TRENDING BATTLE' } },
-      { upsert: true }
-    );
-    const listings = [];
-    const contributions = [];
-    const promotions = [];
-    const events = [];
-    for (const s of SEED_LISTINGS) {
-      const id = uuidv4();
-      const selfPaid = s.raised;
-      const donatedTotal = 0;
-      listings.push({
-        id,
-        type: s.type || 'PROFILE',
-        name: s.name,
-        displayName: s.displayName || s.name,
-        slug: slugify(s.name),
-        tagline: s.tagline,
-        description: s.tagline,
-        logo: s.logo,
-        website: s.website,
-        handle: s.handle || String(s.name || '').replace(/^@/, ''),
-        network: s.network || 'instagram',
-        contactEmail: s.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 14) + '@example.com',
-        category: s.category,
-        socials: {},
-        status: 'APPROVED',
-        verified: Math.random() > 0.6,
-        foundingBadge: true,
-        ownerId: null,
-        totalRaised: s.raised,
-        selfPaid,
-        donated: donatedTotal,
-        backers: 1,
-        connects: Math.floor(Math.random() * 40),
-        views: s.views || Math.floor(Math.random() * 5000) + 200,
-        clicks: s.clicks || Math.floor(Math.random() * 400) + 20,
-        timesOvertaken: Math.floor(Math.random() * 6),
-        highestRank: 1,
-        numberOneMs: Math.floor(Math.random() * 8 * 3600000),
-        trendingUntil: new Date(now.getTime() + (4 + Math.floor(Math.random() * 20)) * 3600 * 1000),
-        lastPaidAt: new Date(now.getTime() - Math.floor(Math.random() * 12 * 3600 * 1000)),
-        createdAt: new Date(now.getTime() - Math.floor(Math.random() * 30 * 24 * 3600 * 1000)),
-      });
-      if (selfPaid > 0) {
-        const at = new Date(now.getTime() - Math.floor(Math.random() * 12 * 24 * 3600 * 1000));
-        contributions.push({
-          id: uuidv4(), listingId: id, listingName: s.name, userId: null,
-          backerName: 'Owner (self-paid)', kind: 'SELF_PAY',
-          amount: selfPaid, message: '', provider: 'MOCK', status: 'SUCCESS', createdAt: at,
-        });
-        events.push({
-          id: uuidv4(), listingId: id, listingName: s.name, eventType: 'SELF_PAY',
-          backerName: s.name, amount: selfPaid, recordedAt: at,
-        });
-      }
-      events.push({
-        id: uuidv4(), listingId: id, listingName: s.name, eventType: 'TOOK_RANK',
-        backerName: s.name, amount: selfPaid, recordedAt: new Date(now.getTime() - Math.floor(Math.random() * 8 * 3600 * 1000)),
-      });
-      if (s.raised > 1000) {
-        promotions.push({
-          id: uuidv4(), listingId: id, plan: 'weekly', amount: Math.round(s.raised * 0.15),
-          startAt: now, endAt: new Date(now.getTime() + (2 + Math.floor(Math.random() * 6)) * 24 * 3600 * 1000),
-          active: true, createdAt: now,
-        });
-      }
-    }
-    // give the global #1 a defend window that looks live
-    if (listings[0]) {
-      listings[0].trendingUntil = new Date(now.getTime() + (18 * 3600 + 42 * 60) * 1000);
-      listings[0].numberOneSince = new Date(now.getTime() - 4 * 3600 * 1000);
-    }
-    await db.collection('hall_of_fame').insertOne({
-      id: uuidv4(),
-      periodStart: new Date(now.getTime() - 2 * COMPETITION_PERIOD_MS),
-      periodEnd: new Date(now.getTime() - COMPETITION_PERIOD_MS),
-      winners: listings.slice(0, 3).map((l, i) => ({
-        rank: i + 1, listingId: l.id, name: l.name, handle: l.handle, logo: l.logo, amount: l.totalRaised, views: l.views,
-      })),
-      createdAt: new Date(now.getTime() - COMPETITION_PERIOD_MS),
-    });
-    if (listings.length) await db.collection('listings').insertMany(listings);
-    if (contributions.length) await db.collection('contributions').insertMany(contributions);
-    if (promotions.length) await db.collection('promotions').insertMany(promotions);
-    if (events.length) await db.collection('rank_events').insertMany(events);
-    await db.collection('meta').updateOne({ _id: 'seed' }, { $set: { version: SEED_VERSION, at: new Date() } }, { upsert: true });
-    return { seeded: true, count: listings.length };
+    return { seeded: false };
   })();
   return seedPromise;
 }
