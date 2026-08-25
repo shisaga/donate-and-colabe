@@ -159,9 +159,9 @@ function LiveBattleCard({ one, two, onBoost, onCompete }) {
   return (
     <div className="brut-lg bg-black text-white p-4 sm:p-6 md:-rotate-1 attack-flash">
       <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#FFE156]">
-          <span className="live-dot" /> 🔥 CURRENT #1 — ALWAYS LIVE
-        </div>
-        <div className="mt-3 text-[11px] font-bold uppercase opacity-70">Holding #1</div>
+        <span className="live-dot" /> 🔥 CURRENT #1 — ALWAYS LIVE
+      </div>
+      <div className="mt-3 text-[11px] font-bold uppercase opacity-70">Holding #1</div>
       <div className="flex items-center gap-3 mt-1">
         {one.image
           ? <img src={one.image} alt={one.name} className="w-12 h-12 brut object-cover bg-white" />
@@ -201,33 +201,99 @@ function Hero({ stats, one, two, onSubmit, onBoost, onCompete }) {
   return (
     <section className="relative overflow-hidden border-b-4 border-black">
       <div className="absolute inset-0 halftone opacity-30" />
+
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-8 md:py-16 relative">
         <div className="grid lg:grid-cols-[1fr_380px] gap-10 items-center">
+
+          {/* LEFT */}
           <div>
             <div className="flex flex-wrap gap-2 mb-5">
-              <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">🔥 ALWAYS LIVE</span></Sticker>
-              <Sticker color="#A0F04D" rotate={3}>NO END DATE</Sticker>
-              <Sticker color="#4DD4E6" rotate={-2}>ADD • PAY • FANS CAN BOOST</Sticker>
+              <Sticker color="#FF5DA2" rotate={-4}>
+                <span className="text-white">🔥 ALWAYS LIVE</span>
+              </Sticker>
+
+              <Sticker color="#A0F04D" rotate={3}>
+                NO END DATE
+              </Sticker>
+
+              <Sticker color="#4DD4E6" rotate={-2}>
+                ADD • SUPPORT • CLIMB
+              </Sticker>
             </div>
+
             <h1 className="font-comic text-4xl sm:text-5xl md:text-7xl leading-[0.95] md:leading-[0.92] tracking-wide break-words">
-              ADD YOUR INSTAGRAM.<br />
-              PAY TO HIT <span className="bg-[#FF5DA2] text-white px-3 inline-block -rotate-1">#1</span>.<br />
-              <span className="bg-black text-[#FFE156] px-3 inline-block rotate-1">NEVER ENDS.</span>
+              PUT YOUR IDEA
+              <br />
+              ON THE <span className="bg-[#FF5DA2] text-white px-3 inline-block -rotate-1">
+                MAP.
+              </span>
+              <br />
+              COMPETE FOR{" "}
+              <span className="bg-black text-[#FFE156] px-3 inline-block rotate-1">
+                #1.
+              </span>
             </h1>
+
             <p className="mt-6 text-lg md:text-xl max-w-xl font-medium">
-              Add your Instagram (or other) profile, then pay to rank it higher. There is no contest deadline — whoever has more money paid toward them stays on top. Fans can search a profile and donate to push them up.
+              Add your startup, product, creator profile, app, business,
+              project, or idea. Get support, climb the rankings, and compete
+              for the top spot. The more support you receive, the higher you rise.
             </p>
+
             <div className="mt-8 flex flex-wrap gap-3">
-              <button onClick={onSubmit} className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center gap-2">
-                <Flame size={20} strokeWidth={3} /> Add your profile
+              <button
+                onClick={onSubmit}
+                className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center gap-2"
+              >
+                <Flame size={20} strokeWidth={3} />
+                Add your profile
               </button>
-              <a href="#leaderboard" className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg inline-flex items-center gap-2">
-                <Trophy size={20} strokeWidth={3} /> Search &amp; donate
+
+              <a
+                href="#leaderboard"
+                className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg inline-flex items-center gap-2"
+              >
+                <Trophy size={20} strokeWidth={3} />
+                Explore rankings
               </a>
-              <a href="#how" className="brut-btn px-6 py-3 bg-white text-lg">How It Works</a>
+
+              <a
+                href="#how"
+                className="brut-btn px-6 py-3 bg-white text-lg"
+              >
+                How It Works
+              </a>
+            </div>
+
+            {/* CATEGORIES */}
+            <div className="mt-7 flex flex-wrap gap-2">
+              {[
+                "🚀 Startups",
+                "📦 Products",
+                "🎨 Creators",
+                "📱 Apps",
+                "🏢 Businesses",
+                "💡 Ideas",
+                "📸 Social Profiles",
+              ].map((item) => (
+                <span
+                  key={item}
+                  className="border-2 border-black bg-white px-3 py-1 font-bold text-sm"
+                >
+                  {item}
+                </span>
+              ))}
             </div>
           </div>
-          <LiveBattleCard one={one} two={two} onBoost={onBoost} onCompete={onCompete} />
+
+          {/* RIGHT */}
+          <LiveBattleCard
+            one={one}
+            two={two}
+            onBoost={onBoost}
+            onCompete={onCompete}
+          />
+
         </div>
       </div>
     </section>
@@ -337,10 +403,10 @@ function ListingCard({ listing, mine, onBoost, onCompete, onShare }) {
   useEffect(() => {
     if (viewed.has(listing.id)) return;
     viewed.add(listing.id);
-    api(`/listings/${listing.id}/view`, { method: 'POST' }).catch(() => {});
+    api(`/listings/${listing.id}/view`, { method: 'POST' }).catch(() => { });
   }, [listing.id]);
   const visit = async () => {
-    try { await api(`/listings/${listing.id}/click`, { method: 'POST' }); } catch (e) {}
+    try { await api(`/listings/${listing.id}/click`, { method: 'POST' }); } catch (e) { }
     const href = listing.website || (listing.handle ? `https://instagram.com/${listing.handle}` : '');
     if (href) window.open(href, '_blank', 'noreferrer');
   };
@@ -578,12 +644,12 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
           <div className="grid grid-cols-2 gap-3">
             {PLATFORMS.map(p => (
               <button key={p.id} disabled={!p.enabled}
-                onClick={() => { 
+                onClick={() => {
                   let defaultCat = 'instagram';
                   if (p.id === 'startup') defaultCat = 'startups';
                   if (p.id === 'product') defaultCat = 'products';
-                  setForm(f => ({ ...f, network: p.id, category: defaultCat })); 
-                  setStep(2); 
+                  setForm(f => ({ ...f, network: p.id, category: defaultCat }));
+                  setStep(2);
                 }}
                 className={`brut-btn py-4 text-lg ${p.enabled ? 'bg-[#FFE156]' : 'bg-white opacity-50 cursor-not-allowed'}`}>
                 {p.label}{!p.enabled && <div className="text-[10px] font-bold">COMING SOON</div>}
@@ -989,11 +1055,11 @@ function App() {
 
   useEffect(() => {
     if (!user) return;
-    api('/me/listings').then(d => setMyListings(d.listings || [])).catch(() => {});
+    api('/me/listings').then(d => setMyListings(d.listings || [])).catch(() => { });
     api('/me/notifications').then(d => {
       const unread = (d.notifications || []).find(n => !n.read && n.type === 'OVERTAKEN');
       if (unread) setOvertaken(unread);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [user]);
 
   const askLogin = (reason, action) => {
@@ -1157,11 +1223,11 @@ function App() {
       <OvertakenModal
         note={overtaken}
         onClose={async () => {
-          try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) {}
+          try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) { }
           setOvertaken(null);
         }}
         onDefend={async () => {
-          try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) {}
+          try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) { }
           const listing = myListings.find(l => l.id === overtaken?.listingId);
           setOvertaken(null);
           if (listing) setInvestTarget({ listing, targetRank: 1, mode: 'SELF_PAY' });
