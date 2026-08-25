@@ -105,7 +105,7 @@ function verifyPassword(pw, stored) {
 }
 function publicUser(u) {
   if (!u) return null;
-  return { id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt, walletBalance: u.walletBalance || 0 };
 }
 async function createSession(db, userId) {
   const token = crypto.randomBytes(32).toString('hex');
@@ -1416,6 +1416,46 @@ async function handler(request, context) {
         .find({ userId: user.id }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
       const invested = items.reduce((s, i) => s + i.amount, 0);
       return json({ investments: items, invested });
+    }
+
+    /* ---------- wallet ---------- */
+    if (path === '/me/wallet' && method === 'GET') {
+      const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+      return json({ balance: user.walletBalance || 0, userId: user.id });
+    }
+
+    if (path === '/me/wallet/topup' && method === 'POST') {
+      const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+      const body = await request.json().catch(() => ({}));
+      const amount = Math.floor(Number(body.amount) || 0);
+      if (amount < 1) return json({ error: 'Minimum top-up is ₹1' }, 400);
+      const currency = body.currency || 'INR';
+      // Create a Razorpay order for the top-up
+      if (!razorpayConfigured()) return json({ error: 'Payment gateway not configured' }, 503);
+      const baseAmount = toBase(amount, currency);
+      const order = await createRazorpayOrder({ amount: baseAmount, currency: BASE_CURRENCY, receipt: `wallet-${user.id}-${Date.now()}` });
+      return json({ order_id: order.id, amount: order.amount, currency: order.currency, key_id: razorpayPublicKey() });
+    }
+
+    if (path === '/me/wallet/topup/verify' && method === 'POST') {
+      const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Unauthorized' }, 401);
+      const body = await request.json().catch(() => ({}));
+      const { razorpay_payment_id, razorpay_order_id, razorpay_signature, amount } = body;
+      if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) return json({ error: 'Missing payment fields' }, 400);
+      const valid = verifyRazorpaySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature });
+      if (!valid) return json({ error: 'Invalid payment signature' }, 400);
+      const baseAmount = Math.floor(Number(amount) || 0);
+      await db.collection('users').updateOne({ id: user.id }, { $inc: { walletBalance: baseAmount } });
+      await db.collection('wallet_transactions').insertOne({
+        id: uuidv4(), userId: user.id, type: 'TOPUP',
+        amount: baseAmount, razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id, createdAt: new Date(),
+      });
+      const updated = await db.collection('users').findOne({ id: user.id });
+      return json({ ok: true, balance: updated?.walletBalance || 0 });
     }
 
     /* ---------- admin ---------- */

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Trophy, Zap, Share2, TrendingUp, Flame, Crown, ArrowUp,
@@ -408,19 +408,42 @@ function ListingCard({ listing, mine, onBoost, onCompete, onShare }) {
   );
 }
 
+/* ── Razorpay helpers (inline, reused from InvestModal) ── */
+function loadRazorpay() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('Browser only'));
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) { existing.addEventListener('load', () => resolve(true), { once: true }); return; }
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.async = true; s.onload = () => resolve(true);
+    s.onerror = () => reject(new Error('Could not load Razorpay'));
+    document.body.appendChild(s);
+  });
+}
+
+const PAY_CHIPS = [1, 51, 101, 201, 501, 1001];
+
 function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, challenge, onPay }) {
-  const { money } = useMoney();
+  const { money, currency, local, symbol, chips, fromBase } = useMoney();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ type: 'PROFILE', name: '', tagline: '', logo: '🔥', website: '', category: 'instagram', contactEmail: '', image: '', network: 'instagram', handle: '', displayName: '' });
   const [targetRank, setTargetRank] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [payLoading, setPayLoading] = useState(false);
   const [quote, setQuote] = useState(null);
   const [created, setCreated] = useState(null);
+  const [amount, setAmount] = useState('');
 
   const loadQuote = async (listingId, cat, rank) => {
     try {
       const q = await api(`/challenge/quote?category=${cat || form.category}&targetRank=${rank || targetRank}${listingId ? `&listingId=${listingId}` : ''}`);
       setQuote(q);
+      // Pre-fill amount with minBid in local currency when moving to pay step
+      if (listingId && q.minBid !== undefined) {
+        setAmount(String(Math.max(1, fromBase ? fromBase(q.minBid) : q.minBid)));
+      }
     } catch (e) { /* ignore */ }
   };
 
@@ -428,6 +451,7 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
     if (open) {
       setStep(1);
       setCreated(null);
+      setAmount('');
       setTargetRank(challenge?.rank || 1);
       setForm({
         type: 'PROFILE', name: '', tagline: '', logo: '🔥', website: '',
@@ -438,28 +462,99 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
     }
   }, [open, user, challenge]);
 
-  const createListing = async () => {
+  // Create listing then move to embedded pay step
+  const createAndPay = async () => {
     if (!user) return onNeedLogin();
     if (!form.name.trim()) return toast.error('Profile name required');
     setLoading(true);
     try {
       const d = await api('/listings', { method: 'POST', body: { ...form, listFree: true } });
       setCreated(d.listing);
-      if (d.quote) setQuote(d.quote);
-      else await loadQuote(d.listing.id, form.category, targetRank);
+      const freshQuote = d.quote || await (async () => {
+        const q = await api(`/challenge/quote?category=${form.category}&targetRank=${targetRank}&listingId=${d.listing.id}`);
+        return q;
+      })();
+      setQuote(freshQuote);
+      // start amount at minimum bid in local currency
+      if (freshQuote?.minBid !== undefined) {
+        setAmount(String(Math.max(1, fromBase ? Math.ceil(fromBase(freshQuote.minBid)) : freshQuote.minBid)));
+      } else {
+        setAmount('');
+      }
       setStep(5);
-    } catch (e) { toast.error(e.message); } finally { setLoading(false); }
+    } catch (e) {
+      if (e.data?.existing) {
+        // already listed — go straight to pay
+        const ex = e.data;
+        setCreated(ex.listing);
+        setQuote(ex.quote);
+        if (ex.quote?.minBid !== undefined) setAmount(String(Math.max(1, fromBase ? Math.ceil(fromBase(ex.quote.minBid)) : ex.quote.minBid)));
+        setStep(5);
+      } else {
+        toast.error(e.message);
+      }
+    } finally { setLoading(false); }
   };
 
-  const goPay = () => {
-    const listing = created;
-    if (!listing) return;
-    onClose();
-    onPay(listing, targetRank);
+  // Embedded Razorpay pay — fires from step 5
+  const payNow = async () => {
+    const amt = Math.floor(Number(amount) || 0);
+    if (amt < 1) return toast.error(`Enter an amount of at least ${symbol}1`);
+    if (!created) return toast.error('Profile not created yet');
+    setPayLoading(true);
+    try {
+      await loadRazorpay();
+      const order = await api('/create-order', {
+        method: 'POST',
+        body: { listingId: created.id, amount: amt, currency, kind: 'SELF_PAY', targetRank, plan: 'weekly', backerName: user?.name },
+      });
+      const key = order.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!key) throw new Error('Razorpay key missing');
+      const checkout = await new Promise((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key, amount: order.amount, currency: order.currency,
+          name: 'PayToTrend',
+          description: `Take #${targetRank} — ${created.name}`,
+          order_id: order.order_id,
+          prefill: { name: user?.name || '', email: user?.email || '' },
+          theme: { color: '#FF5DA2' },
+          handler: (r) => resolve(r),
+          modal: { ondismiss: () => { const e = new Error('Payment cancelled'); e.cancelled = true; reject(e); } },
+        });
+        rzp.on('payment.failed', (r) => reject(new Error(r?.error?.description || 'Payment failed')));
+        rzp.open();
+      });
+      const verified = await api('/verify-payment', {
+        method: 'POST',
+        body: {
+          razorpay_payment_id: checkout.razorpay_payment_id,
+          razorpay_order_id: checkout.razorpay_order_id,
+          razorpay_signature: checkout.razorpay_signature,
+        },
+      });
+      if (verified.newRank === 1) toast.success(`🏆 YOU ARE #1 — ${created.name} took the top spot!`);
+      else toast.success(`🔥 ${local(amt)} paid — you are now #${verified.newRank}!`);
+      onCreated && onCreated({ ...created, newRank: verified.newRank, raised: verified.totalRaised, movedUp: verified.movedUp });
+      onClose();
+    } catch (e) {
+      if (e.cancelled) {
+        // keep modal open — they can try again or change amount
+        toast.message('Payment cancelled. Try again or go back.');
+      } else {
+        toast.error(e.message);
+        if (e.status === 409) {
+          // refresh quote if stale
+          loadQuote(created?.id, form.category, targetRank);
+        }
+      }
+    } finally { setPayLoading(false); }
   };
+
+  const amt = Math.floor(Number(amount) || 0);
+  const isPayStep = step === 5;
 
   return (
-    <Modal open={open} onClose={onClose} wide title="🔥 Start Trending">
+    <Modal open={open} onClose={isPayStep ? undefined : onClose} wide title="🔥 Start Trending">
       {user && (
         <div className="mb-4 flex items-center gap-1 text-[11px] font-bold uppercase overflow-x-auto">
           {['Platform', 'Profile', 'Category', 'Rank', 'Pay'].map((l, i) => (
@@ -536,16 +631,16 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
         </div>
       ) : step === 4 ? (
         <div className="space-y-4">
-          <h2 className="font-comic text-3xl">Choose your target</h2>
+          <h2 className="font-comic text-3xl">Choose your target rank</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             <div className="brut p-4 bg-[#FFE156]">
               <div className="text-[11px] font-bold uppercase">Current #1</div>
-              <div className="font-comic text-2xl">{quote?.top5?.[0]?.name || 'Open'}</div>
+              <div className="font-comic text-2xl">{quote?.top5?.[0]?.name || 'Open slot'}</div>
               <div className="font-comic text-3xl">{money(quote?.top5?.[0]?.amount || 0)}</div>
             </div>
             <div className="brut p-4 bg-[#4DD4E6]">
               <div className="text-[11px] font-bold uppercase">Current #5</div>
-              <div className="font-comic text-2xl">{quote?.top5?.[4]?.name || 'Open'}</div>
+              <div className="font-comic text-2xl">{quote?.top5?.[4]?.name || 'Open slot'}</div>
               <div className="font-comic text-3xl">{money(quote?.top5?.[4]?.amount || 0)}</div>
             </div>
           </div>
@@ -564,27 +659,91 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
           )}
           <div className="flex justify-between">
             <button onClick={() => setStep(3)} className="brut-btn px-4 py-2 bg-white">← Back</button>
-            <button onClick={createListing} disabled={loading} className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg">
-              {loading ? 'Listing...' : 'Continue to payment →'}
+            <button onClick={createAndPay} disabled={loading} className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg">
+              {loading ? 'Setting up...' : 'Continue to payment →'}
             </button>
           </div>
         </div>
       ) : (
+        /* ── Step 5: Mandatory pay-to-list ── */
         <div className="space-y-4">
-          <div className="brut p-4 bg-[#A0F04D]">
-            <div className="font-comic text-3xl">You&apos;re listed</div>
-            <p className="text-sm font-bold mt-1">{created?.name} is on the board. Pay to take #{targetRank} — the ranking never ends.</p>
+          {/* Profile summary */}
+          <div className="brut p-4 bg-black text-white flex items-center gap-3">
+            {created?.image
+              ? <img src={created.image} alt={created.name} className="w-12 h-12 brut object-cover flex-shrink-0" />
+              : <div className="w-12 h-12 brut bg-[#FFE156] flex items-center justify-center text-2xl flex-shrink-0">{created?.logo || '🔥'}</div>}
+            <div className="min-w-0">
+              <div className="font-comic text-xl leading-none break-all">{created?.name}</div>
+              <div className="text-[11px] font-bold uppercase opacity-70">{created?.category} · aiming for #{targetRank}</div>
+            </div>
           </div>
+
+          {/* Pay-to-list notice */}
+          <div className="brut p-3 bg-[#FF5DA2] text-white text-sm font-bold text-center">
+            🔒 Payment required to publish your profile on the leaderboard
+          </div>
+
+          {/* Quote info */}
           {quote && (
-            <div className="brut p-4 bg-white space-y-1 text-sm font-bold">
-              <div className="flex justify-between"><span>Current #{targetRank}</span><span>{money(quote.currentAmount)}</span></div>
-              <div className="flex justify-between"><span>Your required amount</span><span>{money(quote.minBid)}</span></div>
-              <div className="flex justify-between font-comic text-2xl pt-2 border-t-2 border-black"><span>Total</span><span>{money(quote.minBid)}</span></div>
+            <div className="brut p-4 bg-[#FFE156] space-y-1 text-sm font-bold">
+              <div className="flex justify-between"><span>Current #{targetRank} holder</span><span>{quote.currentHolder?.name || 'Open'}</span></div>
+              <div className="flex justify-between"><span>Minimum to take #{targetRank}</span><span>{money(quote.minBid)}</span></div>
+              {quote.minBid === 0 && <div className="text-xs opacity-70 mt-1">No one holds #{targetRank} yet — any amount above {symbol}0 gets you the spot.</div>}
             </div>
           )}
-          <button onClick={goPay} className="brut-btn w-full py-3 bg-[#FF5DA2] text-white text-lg">
-            🔥 TAKE #{targetRank}
-          </button>
+
+          {/* Amount input */}
+          <div>
+            <div className="text-xs font-bold uppercase mb-2">Your bid ({currency}) — start from {symbol}1</div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(chips || PAY_CHIPS).slice(0, 6).map(c => (
+                <button key={c} onClick={() => setAmount(String(c))}
+                  className={`brut-btn px-3 py-2 text-sm ${String(c) === String(amount) ? 'is-pink bg-[#FF5DA2] text-white' : 'is-light bg-white'}`}>
+                  {local ? local(c) : `${symbol}${c}`}
+                </button>
+              ))}
+            </div>
+            <input
+              type="number" min={1} value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder={`Enter amount (min ${symbol}1)`}
+              className="brut w-full p-3 outline-none font-comic text-3xl"
+            />
+          </div>
+
+          {/* Summary */}
+          {amt > 0 && (
+            <div className="brut p-4 bg-[#4DD4E6] space-y-1 text-sm font-bold">
+              <div className="flex justify-between"><span>You pay</span><span>{local ? local(amt) : `${symbol}${amt}`}</span></div>
+              <div className="flex justify-between font-comic text-2xl pt-2 border-t-2 border-black">
+                <span>Total</span><span>{local ? local(amt) : `${symbol}${amt}`}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="brut p-2 bg-[#4DD4E6] font-bold text-xs text-center">🔒 Secure Razorpay checkout</div>
+
+          {/* Actions — no dismiss/skip on pay step */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setStep(4); setCreated(null); }}
+              className="brut-btn px-4 py-2 bg-white text-sm"
+              disabled={payLoading}
+            >
+              ← Back
+            </button>
+            <button
+              onClick={payNow}
+              disabled={payLoading || amt < 1}
+              className="brut-btn flex-1 py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Flame size={18} strokeWidth={3} />
+              {payLoading ? 'Processing...' : amt > 0 ? `🔥 PAY ${local ? local(amt) : `${symbol}${amt}`} & GO LIVE` : `Enter an amount to publish`}
+            </button>
+          </div>
+          <p className="text-[11px] font-semibold opacity-60 text-center">
+            Payment is required to appear on the leaderboard. Rank is always live — pay more anytime to climb.
+          </p>
         </div>
       )}
     </Modal>
