@@ -99,7 +99,7 @@ export default function AdminPage() {
           <div className="mt-5 space-y-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatBox color="#FFE156" label="Total trending" value={fmt(overview.totalRaised)} sub={`${overview.totalBackers || 0} payments`} />
-              <StatBox color="#A0F04D" label="Active profiles" value={overview.totalListings} sub={`${overview.activePromos} live battles`} />
+              <StatBox color="#A0F04D" label="Active profiles" value={overview.totalListings} sub="on the ranking board" />
               <StatBox color="#4DD4E6" label="Registered users" value={overview.users} sub={`${overview.connects} connect requests`} />
               <StatBox color="#B285FF" label="Platform volume" value={fmt(overview.totalRaised)} sub="paid visibility" />
               <StatBox color="#FF5DA2" label="Listings" value={overview.totalListings} sub={`${overview.rejected} rejected`} />

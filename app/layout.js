@@ -1,10 +1,11 @@
 import './globals.css';
+import Script from 'next/script';
 import { Analytics } from '@vercel/analytics/react';
 import { Toaster } from 'sonner';
 
 export const metadata = {
-  title: 'Pay To Trend — Compete. Climb. Get Discovered.',
-  description: 'PayToTrend is a competitive paid-discovery platform. List your social profile, fight for #1 on the public leaderboard, and get discovered. We sell visibility on PayToTrend — not followers or likes.',
+  title: 'Pay To Trend — Add your profile. Pay to rank. Never ends.',
+  description: 'Add your Instagram or other profile, pay to rank higher, and let fans search and donate to boost you. Ranking is always live — there is no contest end date. We sell visibility on PayToTrend, not followers or likes.',
 };
 
 export const viewport = {
@@ -26,6 +27,7 @@ export default function RootLayout({ children }) {
         {children}
         <Toaster position="top-center" richColors />
         <Analytics />
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       </body>
     </html>
   );

@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Trophy, Zap, Share2, TrendingUp, Flame, Crown, ArrowUp,
-  Clock, Users, ChevronRight, LogOut, LayoutDashboard, Shield, Instagram, Swords, Eye, MousePointerClick
+  Users, ChevronRight, LogOut, LayoutDashboard, Shield, Instagram, Swords, Eye, MousePointerClick, Search
 } from 'lucide-react';
 import { Modal, Sticker, StatBox, TalkCloud } from '@/components/brut';
 import AuthModal from '@/components/AuthModal';
 import InvestModal from '@/components/InvestModal';
 import ProfilePicker from '@/components/ProfilePicker';
-import { api, compact, countdown, timeLeft, useAuth } from '@/lib/client';
+import { api, compact, useAuth } from '@/lib/client';
 import { useMoney } from '@/lib/currency';
 
 const COLORS = ['#FFE156', '#FF5DA2', '#4DD4E6', '#FF5C4D', '#A0F04D', '#B285FF', '#FFB84D'];
@@ -53,7 +53,7 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
           <div className="w-11 h-11 bg-black text-[#FFE156] flex items-center justify-center font-comic text-2xl" style={{ borderWidth: 3 }}>PTT</div>
           <div>
             <div className="font-comic text-2xl leading-none">Pay To Trend</div>
-            <div className="text-[11px] font-semibold tracking-wider uppercase">List • Compete • Get Discovered</div>
+            <div className="text-[11px] font-semibold tracking-wider uppercase">Add profile • Pay to rank • Fans can boost</div>
           </div>
         </a>
         <div className="flex items-center gap-2">
@@ -80,7 +80,7 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
             <button onClick={onLogin} className="brut-btn px-4 py-2 bg-white text-sm font-bold">Log in</button>
           )}
           <button onClick={onSubmit} className="brut-btn px-4 py-2 bg-[#FF5DA2] text-white text-sm inline-flex items-center gap-1">
-            <Flame size={16} strokeWidth={3} /> Start Trending
+            <Flame size={16} strokeWidth={3} /> Add your profile
           </button>
         </div>
       </div>
@@ -88,17 +88,17 @@ function Header({ user, onLogin, onLogout, onSubmit }) {
   );
 }
 
-function LiveBattleCard({ one, two, onTake }) {
+function LiveBattleCard({ one, two, onBoost, onCompete }) {
   const { money } = useMoney();
   if (!one) {
     return (
       <div className="brut-lg bg-black text-white p-4 sm:p-6 md:-rotate-1">
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#FFE156]">
-          <span className="live-dot" /> 🔥 LIVE BATTLE
+          <span className="live-dot" /> 🔥 ALWAYS LIVE
         </div>
-        <div className="font-comic text-4xl mt-3">NO ONE IS TRENDING YET</div>
-        <p className="text-sm font-bold mt-2 opacity-80">Be the first to fight for #1.</p>
-        <button onClick={() => onTake(null)} className="brut-btn mt-4 w-full py-3 bg-[#FF5DA2] text-white text-lg">🔥 CLAIM #1</button>
+        <div className="font-comic text-4xl mt-3">NO ONE IS #1 YET</div>
+        <p className="text-sm font-bold mt-2 opacity-80">Add your profile, then pay to take #1. No end date.</p>
+        <button onClick={() => onCompete(null)} className="brut-btn mt-4 w-full py-3 bg-[#FF5DA2] text-white text-lg">🔥 PAY TO TAKE #1</button>
       </div>
     );
   }
@@ -106,9 +106,9 @@ function LiveBattleCard({ one, two, onTake }) {
   return (
     <div className="brut-lg bg-black text-white p-4 sm:p-6 md:-rotate-1 attack-flash">
       <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#FFE156]">
-        <span className="live-dot" /> 🔥 LIVE BATTLE
-      </div>
-      <div className="mt-3 text-[11px] font-bold uppercase opacity-70">Current #1</div>
+          <span className="live-dot" /> 🔥 CURRENT #1 — ALWAYS LIVE
+        </div>
+        <div className="mt-3 text-[11px] font-bold uppercase opacity-70">Holding #1</div>
       <div className="flex items-center gap-3 mt-1">
         {one.image
           ? <img src={one.image} alt={one.name} className="w-12 h-12 brut object-cover bg-white" />
@@ -120,22 +120,25 @@ function LiveBattleCard({ one, two, onTake }) {
       </div>
       <div className="font-comic text-4xl sm:text-5xl md:text-6xl text-[#FFE156] leading-none mt-3 break-words">{money(one.raised)}</div>
       <div className="brut mt-4 p-3 bg-[#FFE156] text-black">
-        <div className="text-[11px] font-bold uppercase">Defend time</div>
-        <div className="font-comic text-3xl leading-tight">{one.trendingUntil ? countdown(one.trendingUntil) : '24H WINDOW'}</div>
+        <div className="text-[11px] font-bold uppercase">This board never ends</div>
+        <div className="font-comic text-3xl leading-tight">PAY MORE TO STAY #1</div>
       </div>
       {two && (
         <div className="brut mt-3 p-3 bg-[#FF5C4D] text-white text-sm font-bold">
           ⚠️ #2 {two.name} IS ONLY {money(gap || two.toTakeOne || 100)} AWAY
         </div>
       )}
-      <button onClick={() => onTake(one)} className="brut-btn mt-4 w-full py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center justify-center gap-2">
-        <Swords size={18} strokeWidth={3} /> TAKE #1
+      <button onClick={() => onBoost(one)} className="brut-btn mt-4 w-full py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center justify-center gap-2">
+        <Flame size={18} strokeWidth={3} /> PAY TO MAKE THEM #1
+      </button>
+      <button onClick={() => onCompete(one)} className="brut-btn mt-2 w-full py-2 bg-white text-black text-sm inline-flex items-center justify-center gap-2">
+        <Swords size={16} strokeWidth={3} /> Take #1 with my profile
       </button>
     </div>
   );
 }
 
-function Hero({ stats, one, two, onSubmit, onTake }) {
+function Hero({ stats, one, two, onSubmit, onBoost, onCompete }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 1000);
@@ -149,30 +152,29 @@ function Hero({ stats, one, two, onSubmit, onTake }) {
         <div className="grid lg:grid-cols-[1fr_380px] gap-10 items-center">
           <div>
             <div className="flex flex-wrap gap-2 mb-5">
-              <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">🔥 LIVE TRENDING</span></Sticker>
-              <Sticker color="#A0F04D" rotate={3}>{stats.viewersOnline || 42} people watching</Sticker>
-              <Sticker color="#4DD4E6" rotate={-2}>COMPETE • CLIMB • GET DISCOVERED</Sticker>
+              <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">🔥 ALWAYS LIVE</span></Sticker>
+              <Sticker color="#A0F04D" rotate={3}>NO END DATE</Sticker>
+              <Sticker color="#4DD4E6" rotate={-2}>ADD • PAY • FANS CAN BOOST</Sticker>
             </div>
             <h1 className="font-comic text-4xl sm:text-5xl md:text-7xl leading-[0.95] md:leading-[0.92] tracking-wide break-words">
-              LIST YOUR PROFILE.<br />
-              FIGHT FOR <span className="bg-[#FF5DA2] text-white px-3 inline-block -rotate-1">#1</span>.<br />
-              <span className="bg-black text-[#FFE156] px-3 inline-block rotate-1">GET DISCOVERED.</span>
+              ADD YOUR INSTAGRAM.<br />
+              PAY TO HIT <span className="bg-[#FF5DA2] text-white px-3 inline-block -rotate-1">#1</span>.<br />
+              <span className="bg-black text-[#FFE156] px-3 inline-block rotate-1">NEVER ENDS.</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl max-w-xl font-medium">
-              Put your Instagram profile in front of people who are looking for what&apos;s trending.
-              Compete with other profiles, climb the leaderboard, and defend your position.
+              Add your Instagram (or other) profile, then pay to rank it higher. There is no contest deadline — whoever has more money paid toward them stays on top. Fans can search a profile and donate to push them up.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <button onClick={onSubmit} className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg inline-flex items-center gap-2">
-                <Flame size={20} strokeWidth={3} /> Start Trending
+                <Flame size={20} strokeWidth={3} /> Add your profile
               </button>
               <a href="#leaderboard" className="brut-btn px-6 py-3 bg-[#A0F04D] text-lg inline-flex items-center gap-2">
-                <Trophy size={20} strokeWidth={3} /> View Rankings
+                <Trophy size={20} strokeWidth={3} /> Search &amp; donate
               </a>
               <a href="#how" className="brut-btn px-6 py-3 bg-white text-lg">How It Works</a>
             </div>
           </div>
-          <LiveBattleCard one={one} two={two} onTake={onTake} />
+          <LiveBattleCard one={one} two={two} onBoost={onBoost} onCompete={onCompete} />
         </div>
       </div>
     </section>
@@ -184,17 +186,18 @@ function GatheringStrip({ stats }) {
   return (
     <section className="max-w-7xl mx-auto px-3 sm:px-4 -mt-2 pt-8">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatBox color="#FFE156" label="Total trending" value={money(stats.totalRaised)} sub="across active competitions" />
-        <StatBox color="#A0F04D" label="Active profiles" value={stats.activeProfiles || stats.totalListings || 0} sub="currently competing" />
-        <StatBox color="#4DD4E6" label="Profile views" value={compact(stats.totalViews)} sub="generated this week" />
-        <StatBox color="#B285FF" label="Social clicks" value={compact(stats.totalClicks)} sub="people discovered profiles" />
-        <StatBox color="#FF5DA2" label="Live battles" value={stats.liveBattles || 0} sub="profiles fighting for #1" />
+        <StatBox color="#FFE156" label="Total paid" value={money(stats.totalRaised)} sub="all money on the board" />
+        <StatBox color="#A0F04D" label="Profiles listed" value={stats.activeProfiles || stats.totalListings || 0} sub="always competing" />
+        <StatBox color="#4DD4E6" label="Profile views" value={compact(stats.totalViews)} sub="visibility on this site" />
+        <StatBox color="#B285FF" label="Profile clicks" value={compact(stats.totalClicks)} sub="people who opened Instagram" />
+        <StatBox color="#FF5DA2" label="Always live" value="∞" sub="no contest end date" />
       </div>
     </section>
   );
 }
 
 function activityText(e, money) {
+  if (e.eventType === 'FAN' || e.kind === 'FAN') return `💖 Fans paid to boost ${e.listingName} — ${money(e.amount)}`;
   if (e.eventType === 'TOOK_RANK' || e.eventType === 'SELF_PAY') return `🔥 ${e.listingName} just took a rank — ${money(e.amount)}`;
   if (e.eventType === 'DEFENDED') return `🛡️ ${e.listingName} defended their position`;
   if (e.eventType === 'ENTERED') return `🔥 ${e.listingName} entered the leaderboard`;
@@ -221,24 +224,21 @@ function ActivityMarquee({ activity }) {
   );
 }
 
-function BattleStrip({ battle }) {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  void tick;
-  if (!battle?.endAt) return null;
+function SearchBar({ value, onChange }) {
   return (
-    <section className="max-w-7xl mx-auto px-3 sm:px-4 pt-8">
-      <div className="brut p-4 sm:p-5 bg-black text-white flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-widest text-[#FF5DA2]">🔥 {battle.label || 'TRENDING BATTLE'}</div>
-          <div className="font-comic text-3xl sm:text-4xl mt-1">ENDS IN {countdown(battle.endAt)}</div>
-        </div>
-        <Sticker color="#FFE156" rotate={-3}>FIGHT FOR #1</Sticker>
-      </div>
-    </section>
+    <div className="brut mb-4 p-2 bg-white flex items-center gap-2">
+      <Search size={18} strokeWidth={3} />
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Search a profile to donate — @handle or name"
+        className="flex-1 outline-none font-bold py-2 bg-transparent"
+        aria-label="Search profiles"
+      />
+      {value ? (
+        <button type="button" onClick={() => onChange('')} className="text-xs font-bold underline px-2">Clear</button>
+      ) : null}
+    </div>
   );
 }
 
@@ -273,10 +273,10 @@ function statusChip(listing) {
   if (listing.rank === 1) return { text: '🔥 HOLDING #1', color: '#FF5DA2', fg: '#fff' };
   if (listing.toTakeOne && listing.toTakeOne <= 300) return { text: `⚡ ${listing.toTakeOne ? '' : ''}₹ TO #1`, color: '#FFE156', fg: '#000', amount: listing.toTakeOne };
   if (listing.rank <= 3) return { text: '🔥 TRENDING NOW', color: '#A0F04D', fg: '#000' };
-  return { text: '⚔️ IN THE BATTLE', color: '#B285FF', fg: '#000' };
+  return { text: '📌 ON THE BOARD', color: '#B285FF', fg: '#000' };
 }
 
-function ListingCard({ listing, onTake, onShare }) {
+function ListingCard({ listing, mine, onBoost, onCompete, onShare }) {
   const { money } = useMoney();
   const color = COLORS[(listing.rank - 1) % COLORS.length];
   const isTop3 = listing.rank <= 3;
@@ -317,15 +317,17 @@ function ListingCard({ listing, onTake, onShare }) {
             <span className="brut px-2 py-1" style={{ background: chip.color, color: chip.fg }}>
               {chip.amount ? `⚡ ${money(chip.amount)} TO #1` : chip.text}
             </span>
-            {listing.trendingUntil && (
-              <span className="inline-flex items-center gap-1"><Clock size={12} strokeWidth={3} /> {timeLeft(listing.trendingUntil)} left</span>
-            )}
           </div>
         </div>
         <div className="flex flex-col gap-2 w-full md:w-auto">
-          <button onClick={() => onTake(listing)} className="brut-btn px-4 py-3 bg-[#FF5DA2] text-white text-sm inline-flex items-center justify-center gap-1">
-            <Flame size={14} strokeWidth={3} /> TAKE #{listing.rank}
+          <button onClick={() => onBoost(listing)} className="brut-btn px-4 py-3 bg-[#FF5DA2] text-white text-sm inline-flex items-center justify-center gap-1">
+            <Flame size={14} strokeWidth={3} /> {mine ? `PAY TO RANK UP` : `DONATE TO RANK THEM UP`}
           </button>
+          {!mine && (
+            <button onClick={() => onCompete(listing)} className="brut-btn px-4 py-2 bg-white text-sm inline-flex items-center justify-center gap-1">
+              <Swords size={14} strokeWidth={3} /> Take this rank with my profile
+            </button>
+          )}
           <button onClick={visit} className="brut-btn px-4 py-2 bg-white text-sm inline-flex items-center justify-center gap-1">
             <Instagram size={14} strokeWidth={3} /> Visit Instagram
           </button>
@@ -343,8 +345,8 @@ function ListingCard({ listing, onTake, onShare }) {
         ) : (
           <span className="inline-flex items-center gap-1">
             <ArrowUp size={12} strokeWidth={3} className="text-[#FF5C4D]" />
-            <button onClick={() => onTake(listing)} className="underline font-bold">
-              ⚠️ {money(listing.toTakeOne || listing.toTakeThis)} TO TAKE #1
+            <button onClick={() => onBoost(listing)} className="underline font-bold">
+              ⚠️ {money(listing.toTakeOne || listing.toTakeThis)} TO PAY THEM TO #1
             </button>
           </span>
         )}
@@ -498,7 +500,7 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
           </div>
           {quote && (
             <div className="brut p-3 bg-black text-white text-sm font-bold">
-              Minimum to take #{targetRank}: <span className="text-[#FFE156]">{money(quote.minBid)}</span>
+              To take #{targetRank}: <span className="text-[#FFE156]">{money(quote.minBid)}</span>
             </div>
           )}
           <div className="flex justify-between">
@@ -511,15 +513,14 @@ function SubmitModal({ open, onClose, categories, onCreated, user, onNeedLogin, 
       ) : (
         <div className="space-y-4">
           <div className="brut p-4 bg-[#A0F04D]">
-            <div className="font-comic text-3xl">You&apos;re in the battle</div>
-            <p className="text-sm font-bold mt-1">{created?.name} is listed in {form.category}. Pay to take #{targetRank}.</p>
+            <div className="font-comic text-3xl">You&apos;re listed</div>
+            <p className="text-sm font-bold mt-1">{created?.name} is on the board. Pay to take #{targetRank} — the ranking never ends.</p>
           </div>
           {quote && (
             <div className="brut p-4 bg-white space-y-1 text-sm font-bold">
               <div className="flex justify-between"><span>Current #{targetRank}</span><span>{money(quote.currentAmount)}</span></div>
               <div className="flex justify-between"><span>Your required amount</span><span>{money(quote.minBid)}</span></div>
-              <div className="flex justify-between"><span>Platform fee</span><span>{money(quote.platformFee)}</span></div>
-              <div className="flex justify-between font-comic text-2xl pt-2 border-t-2 border-black"><span>Total</span><span>{money(quote.totalCharge)}</span></div>
+              <div className="flex justify-between font-comic text-2xl pt-2 border-t-2 border-black"><span>Total</span><span>{money(quote.minBid)}</span></div>
             </div>
           )}
           <button onClick={goPay} className="brut-btn w-full py-3 bg-[#FF5DA2] text-white text-lg">
@@ -537,7 +538,7 @@ function RankCardModal({ open, onClose, listing, onAddMoney }) {
   useEffect(() => { if (typeof window !== 'undefined') setPageUrl(window.location.href); }, [open]);
   if (!listing) return null;
   const rank = listing.newRank || listing.rank;
-  const shareText = `${listing.name} is #${rank} on PayToTrend — fighting for trending visibility.`;
+  const shareText = `${listing.name} is #${rank} on PayToTrend. Search them and donate to push them higher — the board never ends.`;
   const copy = () => {
     try { navigator.clipboard.writeText(shareText + '\n' + pageUrl); toast.success('Copied!'); }
     catch (e) { toast.error('Copy failed'); }
@@ -596,17 +597,17 @@ function OvertakenModal({ note, onClose, onDefend }) {
 
 function HowItWorks() {
   const steps = [
-    { n: '01', title: 'LIST', desc: 'Add your Instagram profile.', color: '#FFE156' },
-    { n: '02', title: 'ENTER', desc: 'Choose a category and enter the competition.', color: '#FF5DA2' },
-    { n: '03', title: 'CLIMB', desc: 'Pay to move higher on the leaderboard.', color: '#4DD4E6' },
-    { n: '04', title: 'GET DISCOVERED', desc: 'Higher positions receive more visibility on PayToTrend.', color: '#A0F04D' },
-    { n: '05', title: 'DEFEND', desc: 'Someone can challenge your position at any time.', color: '#B285FF' },
+    { n: '01', title: 'ADD PROFILE', desc: 'Add your Instagram (or other) profile.', color: '#FFE156' },
+    { n: '02', title: 'PAY TO RANK', desc: 'Pay to climb. More money paid toward you = a higher rank.', color: '#FF5DA2' },
+    { n: '03', title: 'FANS SEARCH', desc: 'Fans search your profile and donate to push you up.', color: '#4DD4E6' },
+    { n: '04', title: 'STAY ON TOP', desc: 'Whoever has more paid toward them holds the higher spot.', color: '#A0F04D' },
+    { n: '05', title: 'NEVER ENDS', desc: 'There is no contest deadline. Rank is always live.', color: '#B285FF' },
   ];
   return (
     <section id="how" className="max-w-7xl mx-auto px-3 sm:px-4 py-14">
       <div className="flex items-end justify-between mb-6 flex-wrap gap-2">
-        <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">How the battle works</h2>
-        <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">LIST → PAY → CLIMB → DEFEND</span></Sticker>
+        <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">How ranking works</h2>
+        <Sticker color="#FF5DA2" rotate={-4}><span className="text-white">ADD → PAY → FANS DONATE → NEVER ENDS</span></Sticker>
       </div>
       <div className="grid md:grid-cols-5 gap-4">
         {steps.map(s => (
@@ -618,7 +619,7 @@ function HowItWorks() {
         ))}
       </div>
       <div className="brut mt-6 p-4 bg-black text-[#FFE156] text-center font-comic text-2xl sm:text-3xl tracking-wide">
-        LIST ↓ PAY ↓ CLIMB ↓ GET DISCOVERED ↓ DEFEND ↓ REPEAT
+        ADD PROFILE ↓ PAY TO RANK ↓ FANS DONATE ↓ STAY ON TOP ↓ NEVER ENDS
       </div>
     </section>
   );
@@ -680,11 +681,11 @@ function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-10 grid md:grid-cols-4 gap-6">
         <div>
           <div className="font-comic text-3xl text-[#FFE156]">Pay To Trend</div>
-          <div className="text-sm opacity-80 mt-1">Compete. Climb. Get discovered.</div>
+          <div className="text-sm opacity-80 mt-1">Add a profile. Pay to rank. Fans can boost. Never ends.</div>
         </div>
         <div className="text-sm space-y-1">
           <div className="font-bold uppercase text-xs">The loop</div>
-          <div className="opacity-80">List → Pay → Climb → Get discovered → Defend your rank.</div>
+          <div className="opacity-80">Add profile → Pay to rank → Fans search and donate → Stay on top.</div>
         </div>
         <div className="text-sm space-y-1">
           <div className="font-bold uppercase text-xs">Honest visibility</div>
@@ -703,10 +704,10 @@ function Footer() {
 function competitiveBanner(rankings, money) {
   const one = rankings[0];
   const two = rankings[1];
-  if (!one) return '🔥 NO ONE IS TRENDING YET — CLAIM #1';
+  if (!one) return '🔥 NO PROFILES YET — ADD YOURS AND PAY TO TAKE #1';
   if (two && (one.leadOverNext || 0) <= 200) return `⚡ ONLY ${money(one.leadOverNext || two.toTakeOne)} TO TAKE #1`;
-  if (one.rank === 1) return `🔥 #1 ${one.name} IS UNDER ATTACK`;
-  return '⚔️ NEW CHALLENGER CAN TAKE ANY RANK';
+  if (one.rank === 1) return `🔥 #1 ${one.name} — PAY MORE TO OVERTAKE`;
+  return '💸 PAY MORE TO CLIMB. FANS CAN DONATE TOO.';
 }
 
 function App() {
@@ -716,9 +717,10 @@ function App() {
   const [stats, setStats] = useState({});
   const [activity, setActivity] = useState([]);
   const [rankings, setRankings] = useState([]);
-  const [hall, setHall] = useState([]);
   const [category, setCategory] = useState('instagram');
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState(null);
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [challenge, setChallenge] = useState(null);
@@ -732,13 +734,12 @@ function App() {
 
   async function loadAll() {
     try {
-      const [c, s, a, h] = await Promise.all([
-        api('/categories'), api('/stats'), api('/activity'), api('/hall-of-fame'),
+      const [c, s, a] = await Promise.all([
+        api('/categories'), api('/stats'), api('/activity'),
       ]);
       setCategories(c.categories || []);
       setStats(s);
       setActivity(a.activity || []);
-      setHall(h.hall || []);
     } catch (e) { /* ignore */ }
   }
   async function loadRankings(cat) {
@@ -756,6 +757,17 @@ function App() {
     const t = setInterval(() => { loadAll(); loadRankings(category); }, 12000);
     return () => clearInterval(t);
   }, [category]);
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) { setResults(null); return; }
+    const t = setTimeout(async () => {
+      try {
+        const d = await api(`/search?q=${encodeURIComponent(q)}`);
+        setResults(d.listings || []);
+      } catch (e) { setResults([]); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
   useEffect(() => {
     if (!user) return;
@@ -781,13 +793,22 @@ function App() {
 
   const mineIn = (cat) => myListings.find(l => l.category === cat);
 
-  const openTake = (holder, authedUser) => {
+  const openBoost = (listing, authedUser) => {
+    if (!listing) return openList(null, authedUser);
     const u = authedUser || user;
-    if (!u) return askLogin('Log in to take this rank with your profile.', { type: 'take', holder });
+    if (!u) return askLogin('Log in to pay and push this profile to #1.', { type: 'boost', listing });
+    const mine = u.id && listing.ownerId === u.id;
+    setInvestTarget({ listing, targetRank: 1, mode: mine ? 'SELF_PAY' : 'FAN' });
+  };
+
+  const openCompete = (holder, authedUser) => {
+    const u = authedUser || user;
+    if (!u) return askLogin('Log in to take this rank with your own profile.', { type: 'take', holder });
+    if (!holder) return openList(null, u);
     const cat = holder?.category || category;
     const mine = mineIn(cat);
     if (mine) {
-      setInvestTarget({ listing: mine, targetRank: holder?.rank || 1 });
+      setInvestTarget({ listing: mine, targetRank: holder?.rank || 1, mode: 'SELF_PAY' });
       return;
     }
     setChallenge(holder);
@@ -797,7 +818,8 @@ function App() {
   const onAuthed = async (token, u) => {
     login(token, u);
     setAuthOpen(false);
-    if (pending?.type === 'take') openTake(pending.holder, u);
+    if (pending?.type === 'boost') openBoost(pending.listing, u);
+    if (pending?.type === 'take') openCompete(pending.holder, u);
     if (pending?.type === 'submit') openList(pending.holder || null, u);
     setPending(null);
     refresh();
@@ -809,6 +831,7 @@ function App() {
     setRankCard(listing);
   };
 
+  const shown = results !== null ? results : rankings;
   const one = rankings[0];
   const two = rankings[1];
 
@@ -820,48 +843,59 @@ function App() {
         onLogout={async () => { await logout(); toast.success('Logged out'); }}
         onSubmit={() => openList(null)}
       />
-      <Hero stats={stats} one={one} two={two} onSubmit={() => openList(null)} onTake={openTake} />
+      <Hero stats={stats} one={one} two={two} onSubmit={() => openList(null)} onBoost={openBoost} onCompete={openCompete} />
       <GatheringStrip stats={stats} />
       <div className="mt-8">
         <ActivityMarquee activity={activity} />
       </div>
-      <BattleStrip battle={stats.battle} />
 
       <div id="instagram" />
       <section id="leaderboard" className="max-w-7xl mx-auto px-3 sm:px-4 py-10">
         <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
           <div>
-            <div className="flex items-center gap-2 mb-2"><TrendingUp size={20} strokeWidth={3} /> <Sticker color="#A0F04D">LIVE</Sticker></div>
-            <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">🔥 The trending leaderboard</h2>
-            <p className="text-sm font-semibold mt-1 opacity-80">Everyone is competing for attention. Higher ranks get more visibility on PayToTrend.</p>
+            <div className="flex items-center gap-2 mb-2"><TrendingUp size={20} strokeWidth={3} /> <Sticker color="#A0F04D">ALWAYS LIVE</Sticker></div>
+            <h2 className="font-comic text-3xl sm:text-4xl md:text-5xl">🔥 The ranking board</h2>
+            <p className="text-sm font-semibold mt-1 opacity-80">Search a profile and donate to rank them up. More money paid = higher rank. No end date.</p>
           </div>
           <div className="flex items-center gap-2">
             <Users size={16} strokeWidth={3} />
             <span className="font-semibold text-sm">{stats.viewersOnline || 42} PEOPLE WATCHING</span>
           </div>
         </div>
+        <SearchBar value={query} onChange={setQuery} />
         <div className="brut p-3 mb-4 bg-[#FF5DA2] text-white font-comic text-xl sm:text-2xl text-center">
-          {competitiveBanner(rankings, money)}
+          {competitiveBanner(shown, money)}
         </div>
-        <CategoryTabs categories={categories} active={category} onChange={setCategory} />
+        {results === null && (
+          <CategoryTabs categories={categories} active={category} onChange={setCategory} />
+        )}
         <div className="mt-5 grid gap-3">
-          {loading ? (
+          {results !== null && shown.length === 0 ? (
+            <div className="brut p-10 text-center font-comic text-3xl">No profiles match “{query.trim()}”.</div>
+          ) : loading && results === null ? (
             <div className="brut p-10 text-center font-comic text-3xl">Loading the board...</div>
-          ) : rankings.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="brut p-10 text-center">
               <div className="flex justify-center mb-8">
                 <TalkCloud>
-                  <div className="font-comic text-xl leading-tight">First to list can claim #1</div>
+                  <div className="font-comic text-xl leading-tight">First to add can take #1</div>
                   <p className="text-sm font-bold mt-1">Visibility on PayToTrend — not guaranteed followers.</p>
                 </TalkCloud>
               </div>
-              <div className="font-comic text-3xl">NO ONE IS TRENDING YET.</div>
-              <p className="mt-2 font-bold">BE THE FIRST TO FIGHT FOR #1.</p>
-              <button onClick={() => openList(null)} className="brut-btn mt-4 px-6 py-3 bg-[#FF5DA2] text-white">🔥 CLAIM #1</button>
+              <div className="font-comic text-3xl">NO PROFILES YET.</div>
+              <p className="mt-2 font-bold">ADD YOURS AND PAY TO TAKE #1.</p>
+              <button onClick={() => openList(null)} className="brut-btn mt-4 px-6 py-3 bg-[#FF5DA2] text-white">🔥 ADD PROFILE</button>
             </div>
           ) : (
-            rankings.map(l => (
-              <ListingCard key={l.id} listing={l} onTake={openTake} onShare={setRankCard} />
+            shown.map(l => (
+              <ListingCard
+                key={l.id}
+                listing={l}
+                mine={!!user && l.ownerId === user.id}
+                onBoost={openBoost}
+                onCompete={openCompete}
+                onShare={setRankCard}
+              />
             ))
           )}
         </div>
@@ -869,15 +903,14 @@ function App() {
 
       <HowItWorks />
       <PayingFor />
-      <HallOfFame hall={hall} />
 
       <section className="max-w-7xl mx-auto px-3 sm:px-4 py-8">
         <div className="brut-lg p-4 sm:p-8 halftone-yellow flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h3 className="font-comic text-2xl sm:text-3xl md:text-4xl">Compete for attention. Climb. Get discovered.</h3>
-            <p className="font-semibold mt-1">Pay to compete for a higher position on PayToTrend — then defend it when someone challenges you.</p>
+            <h3 className="font-comic text-2xl sm:text-3xl md:text-4xl">Add your profile. Pay to climb. Ask fans to donate.</h3>
+            <p className="font-semibold mt-1">Pay for yourself, or search someone and donate to rank them up. The board never ends.</p>
           </div>
-          <button onClick={() => openList(null)} className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg">🔥 Start Trending</button>
+          <button onClick={() => openList(null)} className="brut-btn px-6 py-3 bg-[#FF5DA2] text-white text-lg">🔥 Add your profile</button>
         </div>
       </section>
 
@@ -891,17 +924,18 @@ function App() {
         challenge={challenge}
         onNeedLogin={() => { setSubmitOpen(false); askLogin('You need to log in to start trending.', { type: 'submit', holder: challenge }); }}
         onCreated={async (l) => { if (l.category) setCategory(l.category); await loadAll(); await loadRankings(l.category || category); setRankCard(l); }}
-        onPay={(listing, rank) => setInvestTarget({ listing, targetRank: rank || 1 })}
+        onPay={(listing, rank) => setInvestTarget({ listing, targetRank: rank || 1, mode: 'SELF_PAY' })}
       />
       <InvestModal
         open={!!investTarget}
         onClose={() => setInvestTarget(null)}
         listing={investTarget?.listing}
         targetRank={investTarget?.targetRank || 1}
+        mode={investTarget?.mode || 'SELF_PAY'}
         user={user}
         onDone={afterMoney}
       />
-      <RankCardModal open={!!rankCard} onClose={() => setRankCard(null)} listing={rankCard} onAddMoney={(l) => openTake({ ...l, rank: Math.max(1, (l.newRank || l.rank || 2) - 1) })} />
+      <RankCardModal open={!!rankCard} onClose={() => setRankCard(null)} listing={rankCard} onAddMoney={(l) => openBoost(l)} />
       <OvertakenModal
         note={overtaken}
         onClose={async () => {
@@ -912,7 +946,7 @@ function App() {
           try { await api('/me/notifications/read', { method: 'POST', body: { id: overtaken?.id } }); } catch (e) {}
           const listing = myListings.find(l => l.id === overtaken?.listingId);
           setOvertaken(null);
-          if (listing) setInvestTarget({ listing, targetRank: 1 });
+          if (listing) setInvestTarget({ listing, targetRank: 1, mode: 'SELF_PAY' });
           else openList(null);
         }}
       />

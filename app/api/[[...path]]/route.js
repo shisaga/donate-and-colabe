@@ -2,15 +2,15 @@ import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
-import { stripeEnabled, stripeMode, STRIPE_MIN_INR, createCheckoutSession, retrieveCheckoutSession, verifyWebhook } from '@/lib/stripe';
-import { CURRENCIES, COUNTRY_CURRENCY, BASE_CURRENCY, currencyOf, toBase, toMinorUnits } from '@/lib/money';
+import { CURRENCIES, COUNTRY_CURRENCY, BASE_CURRENCY, currencyOf, toBase } from '@/lib/money';
+import { createRazorpayOrder, razorpayConfigured, razorpayPublicKey, verifyRazorpaySignature } from '@/lib/razorpay';
 
 const MONGO_URL = process.env.MONGO_URL;
 const DB_NAME = process.env.DB_NAME || 'donate_colab';
 
-const MIN_INCREMENT = 100;                 // INR: minimum extra to take a rank
-const PLATFORM_FEE_PCT = 0.10;             // shown at checkout; does not count toward rank
-const COMPETITION_PERIOD_MS = 24 * 60 * 60 * 1000; // MVP: 24 hours
+const MIN_INCREMENT = 1;                   // no minimum pay — ₹1 is enough to enter or overtake
+const PLATFORM_FEE_PCT = 0;                // no platform fee — pay only the bid
+const COMPETITION_PERIOD_MS = 24 * 60 * 60 * 1000; // unused: ranking never expires
 const FREE_LISTING_LIMIT = 100;
 
 // Legacy split kept only so old admin records still render. Not part of PayToTrend.
@@ -350,7 +350,6 @@ async function quoteChallenge(db, { category, listingId, targetRank = 1 }) {
   const minBid = minBidForTarget(ranked, listingId, rank);
   const myAmount = me?.score || 0;
   const newTotal = myAmount + minBid;
-  const fee = platformFeeOn(minBid);
   return {
     category,
     targetRank: rank,
@@ -362,9 +361,9 @@ async function quoteChallenge(db, { category, listingId, targetRank = 1 }) {
     minBid,
     minIncrement: MIN_INCREMENT,
     newTotal,
-    platformFee: fee,
-    platformFeePct: PLATFORM_FEE_PCT * 100,
-    totalCharge: minBid + fee,
+    platformFee: 0,
+    platformFeePct: 0,
+    totalCharge: minBid,
     top5: ranked.slice(0, 5).map(l => ({
       id: l.id, rank: l.rank, name: l.name, handle: l.handle, amount: l.score, image: l.image || '', logo: l.logo,
     })),
@@ -487,7 +486,7 @@ async function enrichListings(db, listings) {
       displayName: l.displayName || l.name,
       handle: l.handle || String(l.name || '').replace(/^@/, ''),
       boost,
-      score: raised + boost,
+      score: raised,
       creatorShare: creatorShare(raised),
       paidOut: paidMap[l.id] || 0,
       sponsored: boost > 0,
@@ -548,7 +547,7 @@ async function attachRanks(db, listings) {
 }
 
 
-/* ------------------------- crediting a payment (shared by MOCK + Stripe) ------------------------- */
+/* ------------------------- crediting a payment ------------------------- */
 async function applyContribution(db, opts) {
   const { listing, amount, kind, user, backerName, message, anonymous, plan, provider, providerRef, paymentId, targetRank } = opts;
   const now = new Date();
@@ -571,8 +570,8 @@ async function applyContribution(db, opts) {
       listingId: fresh.id,
       listingName: fresh.name,
       userId: user?.id || null,
-      kind: kind === 'DONATION' ? 'SELF_PAY' : (kind || 'SELF_PAY'),
-      backerName: backerName || user?.name || fresh.name,
+      kind: (kind === 'FAN' || kind === 'DONATION' || kind === 'FAN_BOOST') ? 'FAN' : (kind || 'SELF_PAY'),
+      backerName: backerName || user?.name || (kind === 'FAN' ? 'Fan' : fresh.name),
       amount,
       fee: platformFeeOn(amount),
       message: String(message || '').slice(0, 200),
@@ -584,14 +583,14 @@ async function applyContribution(db, opts) {
     };
     await db.collection('contributions').insertOne(contribution);
 
-    const trendingUntil = new Date(now.getTime() + COMPETITION_PERIOD_MS);
-    const inc = { totalRaised: amount, backers: 1, selfPaid: amount };
+    const isFan = contribution.kind === 'FAN';
+    const inc = { totalRaised: amount, backers: 1, ...(isFan ? { donated: amount } : { selfPaid: amount }) };
     await db.collection('listings').updateOne({ id: fresh.id }, {
       $inc: inc,
-      $set: { lastPaidAt: now, trendingUntil },
+      $set: { lastPaidAt: now },
     });
 
-    const eventType = (beforeMap[fresh.id]?.rank === 1) ? 'DEFENDED' : 'TOOK_RANK';
+    const eventType = isFan ? 'FAN' : ((beforeMap[fresh.id]?.rank === 1) ? 'DEFENDED' : 'TOOK_RANK');
     await db.collection('rank_events').insertOne({
       id: uuidv4(), listingId: fresh.id, listingName: fresh.name,
       eventType, amount, backerName: contribution.backerName, recordedAt: now,
@@ -630,8 +629,8 @@ async function applyContribution(db, opts) {
       newRank,
       previousRank: beforeMap[fresh.id]?.rank || null,
       totalRaised: updated?.raised || amount,
-      selfPaid: updated?.selfPaid || amount,
-      donated: 0,
+      selfPaid: updated?.selfPaid || (isFan ? 0 : amount),
+      donated: updated?.donated || (isFan ? amount : 0),
       creatorShare: 0,
       quoteAtPay: quote,
       quoteNow: freshQuote,
@@ -794,82 +793,12 @@ async function seedIfNeeded(db) {
 
 function json(data, status = 200) { return NextResponse.json(data, { status }); }
 
-/* ------------------------- Stripe fulfilment (idempotent) ------------------------- */
-async function fulfilStripeSession(db, sessionId) {
-  const record = await db.collection('payments').findOne({ sessionId });
-  if (!record) return { status: 404, body: { error: 'Unknown payment session' } };
-
-  // already credited -> return the stored outcome
-  if (record.creditedAt) {
-    return {
-      status: 200,
-      body: {
-        status: 'paid', credited: false, duplicate: true,
-        newRank: record.newRank || null, amount: record.amount,
-        listingId: record.listingId, listingName: record.listingName, kind: record.kind,
-      },
-    };
-  }
-
-  let session;
-  try {
-    session = await retrieveCheckoutSession(sessionId);
-  } catch (e) {
-    return { status: 502, body: { error: 'Could not verify payment with Stripe' } };
-  }
-
-  if (session.payment_status !== 'paid') {
-    return { status: 200, body: { status: session.payment_status || 'unpaid', credited: false } };
-  }
-  // amounts must match what we created
-  if (typeof session.amount_total === 'number' && record.amountMinor && session.amount_total !== record.amountMinor) {
-    return { status: 409, body: { error: 'Amount mismatch' } };
-  }
-
-  // atomic claim so a webhook + polling race credits only once
-  const claim = await db.collection('payments').findOneAndUpdate(
-    { sessionId, creditedAt: null },
-    { $set: { creditedAt: new Date(), status: 'SUCCESS', stripePaymentIntent: session.payment_intent || null } },
-    { returnDocument: 'after' }
-  );
-  const claimed = claim?.value || claim;
-  if (!claimed || !claimed.creditedAt) {
-    return { status: 200, body: { status: 'paid', credited: false, duplicate: true } };
-  }
-
-  const listing = await db.collection('listings').findOne({ id: record.listingId });
-  if (!listing) return { status: 404, body: { error: 'listing not found' } };
-  const user = record.userId ? await db.collection('users').findOne({ id: record.userId }) : null;
-
-  const res = await applyContribution(db, {
-    listing,
-    amount: record.amount,
-    kind: record.kind || 'SELF_PAY',
-    user,
-    backerName: record.backerName,
-    message: record.message,
-    anonymous: record.anonymous,
-    plan: record.plan,
-    provider: 'STRIPE',
-    providerRef: session.payment_intent || sessionId,
-    paymentId: record.id,
-    targetRank: record.targetRank || 1,
-  });
-
-  await db.collection('payments').updateOne({ sessionId }, { $set: { newRank: res.newRank } });
-
-  return {
-    status: 200,
-    body: {
-      status: 'paid', credited: true, mode: 'STRIPE',
-      listingId: listing.id, listingName: listing.name, listingLogo: listing.logo,
-      listingImage: listing.image || '', category: listing.category,
-      kind: record.kind, amount: record.amount, ...res,
-    },
-  };
+function resolvePayKind(listing, user, requested) {
+  const owner = !!(listing?.ownerId && user?.id && listing.ownerId === user.id);
+  if (owner) return 'SELF_PAY';
+  const fan = requested === 'FAN' || requested === 'DONATION' || requested === 'FAN_BOOST';
+  return fan || !owner ? 'FAN' : 'SELF_PAY';
 }
-
-
 
 async function totals(db) {
   const agg = await db.collection('contributions').aggregate([
@@ -889,7 +818,6 @@ async function totals(db) {
   const now = new Date();
   const liveBattles = await db.collection('listings').countDocuments({
     status: { $ne: 'REJECTED' },
-    trendingUntil: { $gt: now },
   });
   return {
     totalRaised,
@@ -947,7 +875,6 @@ async function handler(request, context) {
 
     const db = await getDb();
     await seedIfNeeded(db);
-    await ensureBattle(db);
 
     if (path === '/health' && method === 'GET') return json({ ok: true, ts: Date.now() });
 
@@ -1052,7 +979,7 @@ async function handler(request, context) {
         detected,
         currencies: Object.values(CURRENCIES).map(c => ({
           code: c.code, symbol: c.symbol, name: c.name, rateToInr: c.rateToInr,
-          cardMin: c.cardMin, chips: c.chips, zeroDecimal: !!c.zeroDecimal,
+          chips: c.chips, zeroDecimal: !!c.zeroDecimal,
         })),
       });
     }
@@ -1063,25 +990,16 @@ async function handler(request, context) {
 
     if (path === '/stats' && method === 'GET') {
       const t = await totals(db);
-      const now = new Date();
       const totalListings = await db.collection('listings').countDocuments({ status: { $ne: 'REJECTED' } });
-      const activePromos = await db.collection('promotions').countDocuments({ endAt: { $gt: now } });
-      const battle = await ensureBattle(db);
       return json({
         ...t,
         totalListings,
         activeProfiles: totalListings,
-        activePromos,
         viewersOnline: 30 + Math.floor(Math.random() * 80),
         listingQuota: await listingQuota(db),
         minIncrement: MIN_INCREMENT,
         platformFeePct: PLATFORM_FEE_PCT * 100,
-        battle: {
-          label: battle.label || '24-HOUR TRENDING BATTLE',
-          startAt: battle.startAt,
-          endAt: battle.endAt,
-          periodMs: battle.periodMs || COMPETITION_PERIOD_MS,
-        },
+        battle: null,
       });
     }
 
@@ -1089,15 +1007,27 @@ async function handler(request, context) {
       return json(await listingQuota(db));
     }
 
+    if (path === '/search' && method === 'GET') {
+      const q = String(url.searchParams.get('q') || '').trim();
+      const category = url.searchParams.get('category') || 'all';
+      if (!q) return json({ listings: [], q: '' });
+      const ranked = await rankedCategory(db, category);
+      const needle = q.replace(/^@/, '').toLowerCase();
+      const listings = ranked.filter(l => {
+        const hay = [l.name, l.handle, l.displayName, l.tagline, l.website].join(' ').toLowerCase();
+        return hay.includes(needle);
+      });
+      return json({ listings, q });
+    }
+
     if (path === '/rankings' && method === 'GET') {
       const category = url.searchParams.get('category') || 'all';
       const limit = parseInt(url.searchParams.get('limit') || '50');
       const ranked = await rankedCategory(db, category);
-      const battle = await ensureBattle(db);
       return json({
         rankings: ranked.slice(0, limit),
         minIncrement: MIN_INCREMENT,
-        battle: { label: battle.label, startAt: battle.startAt, endAt: battle.endAt },
+        battle: null,
       });
     }
 
@@ -1243,7 +1173,7 @@ async function handler(request, context) {
       const quota = await listingQuota(db);
       if (listFree !== false && !quota.freeOpen) {
         return json({
-          error: 'Free listing slots are full. Pay to enter the battle.',
+          error: 'Free listing slots are full. Pay to list your profile and start ranking.',
           code: 'FREE_SLOTS_FULL',
           quota,
         }, 402);
@@ -1286,7 +1216,175 @@ async function handler(request, context) {
       });
     }
 
-    /* ---------- pay to take / defend a rank (MOCK fallback) ---------- */
+    /* ---------- Razorpay Standard Checkout ---------- */
+    if (path === '/create-order' && method === 'POST') {
+      if (!razorpayConfigured()) return json({ error: 'Razorpay is not configured' }, 500);
+      const body = await request.json();
+      const user = await currentUser(db, request);
+      if (!user) return json({ error: 'Log in to compete for a rank.' }, 401);
+
+      const listingId = body.listingId || null;
+      const cur = currencyOf(body.currency || BASE_CURRENCY);
+      const targetRank = Math.max(1, Math.min(5, Number(body.targetRank) || 1));
+      let amountPaise;
+      let amountInr;
+      let localAmount;
+      let listing = null;
+      let kind = 'SELF_PAY';
+
+      if (listingId) {
+        localAmount = Math.floor(Number(body.amount));
+        if (!Number.isFinite(localAmount) || localAmount < 1) {
+          return json({ error: `Minimum amount is ${cur.symbol}1` }, 400);
+        }
+        amountInr = cur.code === BASE_CURRENCY ? localAmount : toBase(localAmount, cur.code);
+        amountPaise = amountInr * 100;
+        listing = await db.collection('listings').findOne({ id: listingId });
+        if (!listing) return json({ error: 'listing not found' }, 404);
+        kind = resolvePayKind(listing, user, body.kind);
+        const quote = await quoteChallenge(db, { category: listing.category, listingId: listing.id, targetRank });
+        if (amountInr < quote.minBid) {
+          return json({
+            error: `Too late — #${targetRank} now costs more. Minimum is ₹${quote.minBid}.`,
+            code: 'AMOUNT_STALE',
+            quote,
+          }, 409);
+        }
+      } else {
+        amountPaise = Math.floor(Number(body.amountPaise ?? body.amount));
+        amountInr = Math.round(amountPaise / 100);
+        localAmount = amountInr;
+      }
+
+      if (!Number.isFinite(amountPaise) || amountPaise < 100) {
+        return json({ error: 'Minimum amount is 100 paise' }, 400);
+      }
+
+      const paymentId = uuidv4();
+      let order;
+      try {
+        order = await createRazorpayOrder({
+          amount: amountPaise,
+          currency: 'INR',
+          receipt: body.receipt || paymentId.replace(/-/g, '').slice(0, 40),
+          notes: {
+            paymentId,
+            listingId: listingId || '',
+            userId: user.id,
+            kind,
+            targetRank: String(targetRank),
+          },
+        });
+      } catch (e) {
+        const status = e.status === 401 ? 401 : (e.status === 400 ? 400 : 500);
+        return json({ error: e.message || 'Could not create Razorpay order' }, status);
+      }
+
+      await db.collection('payments').insertOne({
+        id: paymentId,
+        listingId: listingId || null,
+        listingName: listing?.name || '',
+        userId: user.id,
+        provider: 'RAZORPAY',
+        orderId: order.id,
+        amount: amountInr,
+        amountPaise,
+        fee: platformFeeOn(amountInr),
+        localAmount,
+        localCurrency: cur.code,
+        currency: 'INR',
+        kind,
+        targetRank,
+        plan: body.plan || '',
+        message: String(body.message || '').slice(0, 200),
+        backerName: body.backerName || user.name || '',
+        status: 'PENDING',
+        creditedAt: null,
+        createdAt: new Date(),
+      });
+
+      return json({
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        key_id: razorpayPublicKey(),
+      });
+    }
+
+    if (path === '/verify-payment' && method === 'POST') {
+      const body = await request.json();
+      const razorpay_order_id = body.razorpay_order_id;
+      const razorpay_payment_id = body.razorpay_payment_id;
+      const razorpay_signature = body.razorpay_signature;
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return json({ error: 'razorpay_order_id, razorpay_payment_id and razorpay_signature are required' }, 400);
+      }
+      if (!verifyRazorpaySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+        return json({ error: 'Signature mismatch', success: false }, 400);
+      }
+
+      const record = await db.collection('payments').findOne({ orderId: razorpay_order_id, provider: 'RAZORPAY' });
+      if (!record) {
+        return json({ success: true, verified: true, order_id: razorpay_order_id, payment_id: razorpay_payment_id });
+      }
+      if (record.creditedAt) {
+        return json({
+          success: true, verified: true, credited: false, duplicate: true,
+          newRank: record.newRank || null, amount: record.amount,
+          listingId: record.listingId, listingName: record.listingName, kind: record.kind,
+        });
+      }
+
+      const claim = await db.collection('payments').findOneAndUpdate(
+        { orderId: razorpay_order_id, creditedAt: null },
+        {
+          $set: {
+            creditedAt: new Date(),
+            status: 'SUCCESS',
+            razorpayPaymentId: razorpay_payment_id,
+            razorpaySignature: razorpay_signature,
+          },
+        },
+        { returnDocument: 'after' }
+      );
+      const claimed = claim?.value || claim;
+      if (!claimed || !claimed.creditedAt) {
+        return json({ success: true, verified: true, credited: false, duplicate: true });
+      }
+
+      if (!record.listingId) {
+        return json({ success: true, verified: true, credited: false, order_id: razorpay_order_id, payment_id: razorpay_payment_id });
+      }
+
+      const listing = await db.collection('listings').findOne({ id: record.listingId });
+      if (!listing) return json({ error: 'listing not found' }, 404);
+      const user = record.userId ? await db.collection('users').findOne({ id: record.userId }) : null;
+
+      const res = await applyContribution(db, {
+        listing,
+        amount: record.amount,
+        kind: record.kind || 'SELF_PAY',
+        user,
+        backerName: record.backerName,
+        message: record.message,
+        plan: record.plan,
+        provider: 'RAZORPAY',
+        providerRef: razorpay_payment_id,
+        paymentId: record.id,
+        targetRank: record.targetRank || 1,
+      });
+
+      await db.collection('payments').updateOne({ orderId: razorpay_order_id }, { $set: { newRank: res.newRank } });
+
+      return json({
+        success: true, verified: true, credited: true, mode: 'RAZORPAY',
+        listingId: listing.id, listingName: listing.name, listingLogo: listing.logo,
+        listingImage: listing.image || '', category: listing.category,
+        kind: record.kind, amount: record.amount, baseAmount: record.amount, ...res,
+      });
+    }
+
+    /* ---------- pay to take / defend a rank ---------- */
     if (path === '/support' && method === 'POST') {
       const body = await request.json();
       const user = await currentUser(db, request);
@@ -1302,9 +1400,7 @@ async function handler(request, context) {
       const amount = cur.code === BASE_CURRENCY ? localAmount : toBase(localAmount, cur.code);
       const listing = await db.collection('listings').findOne({ id: listingId });
       if (!listing) return json({ error: 'listing not found' }, 404);
-      if (listing.ownerId !== user.id) {
-        return json({ error: 'You can only pay to trend your own profile.' }, 403);
-      }
+      const kind = resolvePayKind(listing, user, body.kind);
       const quote = await quoteChallenge(db, { category: listing.category, listingId: listing.id, targetRank });
       if (amount < quote.minBid) {
         return json({
@@ -1319,149 +1415,22 @@ async function handler(request, context) {
         amount, currency: BASE_CURRENCY,
         localAmount, localCurrency: cur.code,
         fee: platformFeeOn(amount),
-        status: 'SUCCESS', kind: 'SELF_PAY', targetRank, createdAt: new Date(),
+        status: 'SUCCESS', kind, targetRank, createdAt: new Date(),
       };
       await db.collection('payments').insertOne(payment);
 
       const res = await applyContribution(db, {
-        listing, amount, kind: 'SELF_PAY', user,
+        listing, amount, kind, user,
         backerName: body.backerName || user.name, plan: body.plan,
         provider: 'MOCK', paymentId: payment.id, targetRank,
       });
 
       return json({
-        ok: true, mode: 'MOCK', ...res, category: listing.category, kind: 'SELF_PAY', payment,
+        ok: true, mode: 'MOCK', ...res, category: listing.category, kind, payment,
         localAmount, localCurrency: cur.code, baseAmount: amount,
         platformFee: platformFeeOn(amount),
         totalCharge: amount + platformFeeOn(amount),
       });
-    }
-
-    /* ---------- Stripe Checkout ---------- */
-    if (path === '/payments/config' && method === 'GET') {
-      return json({
-        provider: stripeEnabled ? 'stripe' : 'mock', mode: stripeMode,
-        cardMinAmount: STRIPE_MIN_INR, base: BASE_CURRENCY, live: false, sandbox: true,
-        platformFeePct: PLATFORM_FEE_PCT * 100, minIncrement: MIN_INCREMENT,
-      });
-    }
-
-    if (path === '/payments/checkout' && method === 'POST') {
-      const body = await request.json();
-      const user = await currentUser(db, request);
-      if (!user) return json({ error: 'Log in to compete for a rank.' }, 401);
-      const localAmount = Math.floor(Number(body.amount));
-      const cur = currencyOf(body.currency || BASE_CURRENCY);
-      const targetRank = Math.max(1, Math.min(5, Number(body.targetRank) || 1));
-      if (!body.listingId) return json({ error: 'listingId required' }, 400);
-      if (!Number.isFinite(localAmount) || localAmount < 1) {
-        return json({ error: `Minimum amount is ${cur.symbol}1` }, 400);
-      }
-      const amount = cur.code === BASE_CURRENCY ? localAmount : toBase(localAmount, cur.code);
-      const listing = await db.collection('listings').findOne({ id: body.listingId });
-      if (!listing) return json({ error: 'listing not found' }, 404);
-      if (listing.ownerId !== user.id) {
-        return json({ error: 'You can only pay to trend your own profile.' }, 403);
-      }
-      const quote = await quoteChallenge(db, { category: listing.category, listingId: listing.id, targetRank });
-      if (amount < quote.minBid) {
-        return json({
-          error: `Too late — #${targetRank} now costs more. Minimum is ₹${quote.minBid}.`,
-          code: 'AMOUNT_STALE',
-          quote,
-        }, 409);
-      }
-      if (!stripeEnabled) return json({ error: 'STRIPE_UNAVAILABLE', mode: 'MOCK' }, 503);
-
-      const feeLocal = Math.round(localAmount * PLATFORM_FEE_PCT);
-      const chargeLocal = localAmount + feeLocal;
-      if (chargeLocal < cur.cardMin) {
-        return json({
-          error: `Card payments start at ${cur.symbol}${cur.cardMin} (Stripe's minimum). Smaller amounts are recorded in demo mode.`,
-          code: 'BELOW_CARD_MIN', minAmount: cur.cardMin, currency: cur.code, mode: 'MOCK',
-        }, 409);
-      }
-
-      const origin = publicOrigin(request);
-      const paymentId = uuidv4();
-      try {
-        const { session, currency, unit } = await createCheckoutSession({
-          amount: chargeLocal,
-          currency: cur.code.toLowerCase(),
-          minorUnits: toMinorUnits(chargeLocal, cur.code),
-          name: `Take #${targetRank} — ${listing.name}`,
-          description: `PayToTrend visibility: compete for #${targetRank} on the public leaderboard`,
-          metadata: {
-            paymentId, listingId: listing.id, kind: 'SELF_PAY', amount: String(amount),
-            userId: user.id, plan: body.plan || '', targetRank: String(targetRank),
-          },
-          successUrl: `${origin}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancelUrl: `${origin}/pay/cancel`,
-        });
-
-        await db.collection('payments').insertOne({
-          id: paymentId,
-          listingId: listing.id,
-          listingName: listing.name,
-          userId: user.id,
-          provider: 'STRIPE',
-          sessionId: session.id,
-          amount,
-          fee: toBase(feeLocal, cur.code),
-          localAmount,
-          localCurrency: cur.code,
-          chargeLocal,
-          amountMinor: unit,
-          currency: currency.toUpperCase(),
-          kind: 'SELF_PAY',
-          targetRank,
-          plan: body.plan || '',
-          message: String(body.message || '').slice(0, 200),
-          anonymous: false,
-          backerName: body.backerName || user.name || '',
-          status: 'PENDING',
-          creditedAt: null,
-          createdAt: new Date(),
-        });
-
-        return json({ ok: true, mode: 'STRIPE', sessionId: session.id, url: session.url, currency });
-      } catch (e) {
-        console.error('Stripe checkout error:', e.message);
-        return json({ error: 'Could not start Stripe checkout: ' + e.message }, 502);
-      }
-    }
-
-    // Fulfil a paid session exactly once (used by success page polling + webhook)
-    if (path === '/payments/status' && method === 'GET') {
-      const sessionId = url.searchParams.get('session_id');
-      if (!sessionId) return json({ error: 'session_id required' }, 400);
-      if (!stripeEnabled) return json({ error: 'STRIPE_UNAVAILABLE' }, 503);
-      const result = await fulfilStripeSession(db, sessionId);
-      return json(result.body, result.status);
-    }
-
-    if (path === '/webhook/stripe' && method === 'POST') {
-      if (!stripeEnabled) return json({ ignored: true });
-      const raw = await request.text();
-      const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      let event;
-      if (secret) {
-        try {
-          event = verifyWebhook(raw, request.headers.get('stripe-signature'), secret);
-        } catch (e) {
-          return json({ error: 'invalid signature' }, 400);
-        }
-      } else {
-        // No signing secret configured (sandbox): accept but only trust the session id,
-        // every value is re-read from Stripe before crediting.
-        try { event = JSON.parse(raw); } catch (e) { return json({ error: 'bad payload' }, 400); }
-      }
-      const type = event?.type;
-      const sessionId = event?.data?.object?.id;
-      if (sessionId && ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(type)) {
-        await fulfilStripeSession(db, sessionId);
-      }
-      return json({ received: true });
     }
 
     /* ---------- what does it cost to grab #1 / the next rank ---------- */

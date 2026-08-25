@@ -41,7 +41,7 @@ export default function DashboardPage() {
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="brut-lg bg-white p-8 max-w-md text-center">
           <div className="font-comic text-3xl">Log in to see your stats</div>
-          <p className="text-sm font-semibold mt-2">Track rank, PayToTrend views, Instagram clicks, and defend your position.</p>
+          <p className="text-sm font-semibold mt-2">Track rank, PayToTrend views, Instagram clicks, and pay more anytime to climb. The board never ends.</p>
           <button onClick={() => setAuthOpen(true)} className="brut-btn mt-4 px-6 py-3 bg-[#FFE156]">Log in / Register</button>
           <a href="/" className="block text-xs font-bold underline mt-3">← back to leaderboard</a>
         </div>
@@ -73,7 +73,7 @@ export default function DashboardPage() {
           <StatBox color="#FFE156" label="Best rank" value={best < 999 ? `#${best}` : '—'} sub={`${listings.length} profiles`} />
           <StatBox color="#A0F04D" label="PayToTrend views" value={compact(views)} sub="visibility on this site" />
           <StatBox color="#4DD4E6" label="Instagram clicks" value={compact(clicks)} sub="people who tapped through" />
-          <StatBox color="#FF5DA2" label="You paid" value={money(invested)} sub={`${investments.length} challenges`} />
+          <StatBox color="#FF5DA2" label="You paid" value={money(invested)} sub={`${investments.length} payments`} />
         </div>
 
         {notes.filter(n => !n.read && n.type === 'OVERTAKEN').slice(0, 1).map(n => (
@@ -119,7 +119,7 @@ export default function DashboardPage() {
                       onClick={() => setInvestTarget(l)}
                       className="brut-btn px-4 py-2 bg-[#FF5DA2] text-white text-sm inline-flex items-center gap-1"
                     >
-                      <Flame size={14} strokeWidth={3} /> {l.rank === 1 ? 'Defend #1' : 'Climb'}
+                      <Flame size={14} strokeWidth={3} /> {l.rank === 1 ? 'Pay to defend #1' : 'Pay to take #1'}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-bold">
@@ -142,7 +142,7 @@ export default function DashboardPage() {
         <div>
           <h2 className="font-comic text-3xl mb-3">Your payments</h2>
           {investments.length === 0 ? (
-            <div className="brut p-6 bg-white font-bold">No challenges yet. <a href="/#leaderboard" className="underline">Fight for a rank →</a></div>
+            <div className="brut p-6 bg-white font-bold">No payments yet. <a href="/#leaderboard" className="underline">Pay to climb, or donate to someone →</a></div>
           ) : (
             <div className="brut p-4 bg-white">
               {investments.map(i => (
